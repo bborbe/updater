@@ -8,6 +8,10 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## v0.1.1
+- Add BSD 2-Clause LICENSE file
+- Remove development-specific Makefile targets (run, run-verbose)
+
 ## v0.1.0
 
 Initial release of multi-language dependency updater with AI-powered automation.

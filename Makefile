@@ -17,12 +17,6 @@ test:
 test-verbose:
 	uv run pytest -v
 
-run:
-	uv run update-deps /Users/bborbe/Documents/workspaces/sm-octopus/lib
-
-run-verbose:
-	uv run update-deps /Users/bborbe/Documents/workspaces/sm-octopus/lib --verbose
-
 clean:
 	rm -rf .pytest_cache
 	rm -rf .venv
