@@ -8,6 +8,13 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## v0.2.1
+
+**Workflow Changes:**
+- Add authorization checks to GitHub Actions workflows (restrict Claude triggers to trusted users)
+- Enable author filtering in code review workflow (bborbe and collaborators only)
+- Add structured authorization validation with separate check-auth job
+
 ## v0.2.0
 
 **New Features:**
