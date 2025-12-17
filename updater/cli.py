@@ -20,6 +20,7 @@ from .git_operations import (
     update_git_branch,
 )
 from .go_updater import run_precommit, update_go_dependencies
+from .gomod_excludes import apply_gomod_excludes_and_replaces
 from .log_manager import (
     cleanup_old_logs,
     close_module_logging,
@@ -28,6 +29,7 @@ from .log_manager import (
 )
 from .module_discovery import discover_go_modules
 from .prompts import prompt_skip_or_retry, prompt_yes_no
+from .version_updater import update_versions
 
 
 async def process_single_module(module_path: Path) -> bool:
@@ -61,11 +63,20 @@ async def process_single_module(module_path: Path) -> bool:
             log_message("✗ No git repository found", to_console=True)
             return False
 
-        # Phase 1: Update dependencies
-        updates_made = update_go_dependencies(module_path, log_func=log_message)
+        # Phase 1a: Update runtime versions (golang, alpine)
+        version_updates = update_versions(module_path, log_func=log_message)
 
-        # Phase 1b: Check if git shows any changes (from this run or previous runs)
-        change_count, files = check_git_status(git_repo)
+        # Phase 1b: Apply standard excludes and replaces
+        log_message("\n=== Phase 1b: Apply Standard Excludes/Replaces ===", to_console=True)
+        excludes_updates = apply_gomod_excludes_and_replaces(module_path, log_func=log_message)
+
+        # Phase 1c: Update dependencies
+        dep_updates = update_go_dependencies(module_path, log_func=log_message)
+
+        updates_made = version_updates or excludes_updates or dep_updates
+
+        # Phase 1d: Check if git shows any changes (from this run or previous runs)
+        change_count, files = check_git_status(module_path)
 
         if change_count == 0 and not updates_made:
             log_message("\n✓ No updates needed - module is already up to date", to_console=True)
@@ -90,7 +101,7 @@ async def process_single_module(module_path: Path) -> bool:
         run_precommit(module_path, log_func=log_message)
 
         # Phase 2b: Check if changes remain after precommit
-        change_count, files = check_git_status(git_repo)
+        change_count, files = check_git_status(module_path)
         if change_count == 0:
             log_message("\n✓ No changes remain after precommit (auto-formatted/fixed)", to_console=True)
             return True
@@ -132,6 +143,33 @@ async def process_single_module(module_path: Path) -> bool:
             return True
 
         # Phase 4: Update CHANGELOG with Claude's suggestions
+        changelog_path = module_path / "CHANGELOG.md"
+
+        if not changelog_path.exists():
+            # No CHANGELOG.md - commit without tag
+            log_message("\n→ No CHANGELOG.md found, committing without tag", to_console=True)
+
+            print("\n" + "=" * 60)
+            print(f"READY TO COMMIT: {module_path.name}")
+            print("=" * 60)
+            print(f"Commit message: {analysis['commit_message']}")
+            print("\nChanges:")
+            for bullet in analysis['changelog']:
+                print(f"  - {bullet.lstrip('- ')}")
+            print("\nNote: No CHANGELOG.md found, no version tag will be created")
+            print("=" * 60)
+
+            # Ask for confirmation
+            if not prompt_yes_no("\nProceed with commit (no tag)?", default_yes=True):
+                log_message("\n⚠ Skipped by user", to_console=True)
+                log_message("  Changes are staged but not committed", to_console=True)
+                return True
+
+            git_commit(module_path, analysis['commit_message'], log_func=log_message)
+            log_message("\n✓ Commit completed successfully (no tag)!", to_console=True)
+            return True
+
+        # CHANGELOG.md exists - update and create tag
         new_version = update_changelog_with_suggestions(module_path, analysis, log_func=log_message)
 
         # Show summary and ask for confirmation (always to console)
@@ -249,18 +287,17 @@ async def main_async() -> int:
         modules = [module_path]
         print(f"Single module mode: {module_path}\n")
     else:
-        # Try non-recursive first (direct children only)
-        modules = discover_go_modules(module_path, recursive=False)
-
-        # If no direct children, try recursive search (monorepo mode)
-        if not modules:
-            modules = discover_go_modules(module_path, recursive=True)
-            if modules:
-                print(f"Monorepo mode: searching recursively\n")
+        # Search recursively to find all nested modules
+        modules = discover_go_modules(module_path, recursive=True)
 
         if not modules:
             print(f"✗ No Go modules found in: {module_path}")
             return 1
+
+        if len(modules) > 1:
+            print(f"Multi-module mode: found {len(modules)} modules\n")
+        else:
+            print(f"Single module found: {modules[0].name}\n")
 
         print(f"Found {len(modules)} Go module(s):\n")
         for i, mod in enumerate(modules, 1):
@@ -299,25 +336,25 @@ async def main_async() -> int:
         print("\nCannot proceed. Please fix errors and try again.")
         return 1
 
-    # Step 3: Check for uncommitted changes
+    # Step 3: Check for uncommitted changes in module directories
     print("=== Step 3: Check for Uncommitted Changes ===\n")
 
-    dirty_repos = []
+    dirty_modules = []
 
-    for repo in sorted(module_repos):
-        change_count, files = check_git_status(repo)
+    for module in modules:
+        change_count, files = check_git_status(module)
 
         if change_count == -1:
-            print(f"✗ Failed to check status: {repo}")
+            print(f"✗ Failed to check status: {module.name}")
             return 1
 
         if change_count > 0:
-            dirty_repos.append((repo, change_count, files))
+            dirty_modules.append((module, change_count, files))
 
-    if dirty_repos:
-        print("⚠ Uncommitted changes detected:\n")
-        for repo, count, files in dirty_repos:
-            print(f"  - {repo.name}: {count} file(s)")
+    if dirty_modules:
+        print("⚠ Uncommitted changes detected in module(s):\n")
+        for module, count, files in dirty_modules:
+            print(f"  - {module.name}: {count} file(s)")
 
             # Show condensed file list if 20 or fewer lines
             condensed_files = condense_file_list(files)
@@ -331,7 +368,7 @@ async def main_async() -> int:
             return 1
         print()
     else:
-        print("✓ No uncommitted changes\n")
+        print("✓ No uncommitted changes in module(s)\n")
 
     print("=" * 70 + "\n")
 

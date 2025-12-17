@@ -17,7 +17,7 @@ def update_go_dependencies(module_path: Path, log_func: Callable = log_message) 
     Returns:
         True if updates were made, False otherwise
     """
-    log_func("\n=== Phase 1: Update Go Dependencies ===", to_console=True)
+    log_func("\n=== Phase 1c: Update Go Dependencies ===", to_console=True)
 
     max_iterations = config.GO_MAX_ITERATIONS
     iteration = 0

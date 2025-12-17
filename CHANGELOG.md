@@ -8,6 +8,30 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## v0.2.0
+
+**New Features:**
+- Add golang version updates (Dockerfile, go.mod, GitHub workflows)
+- Add alpine version updates (Dockerfile)
+- Add standard go.mod excludes and replaces for problematic versions
+- Add recursive module discovery (finds deeply nested modules)
+
+**Bug Fixes:**
+- Fix git status to filter by module path only (no unrelated directories shown)
+- Fix git status to exclude vendor/ files
+- Fix go.mod version updates to write full version (1.25.5) for idempotency
+- Fix confusing output when CHANGELOG.md doesn't exist (now shows clear "no tag" message)
+
+**Documentation:**
+- Reorganize README.md for clarity
+- Add docs/ directory with detailed guides (monorepo-mode, version-bumping, logging, development, roadmap)
+
+**Workflow Changes:**
+- Phase 1a: Update versions (golang, alpine)
+- Phase 1b: Apply standard excludes/replaces
+- Phase 1c: Update dependencies (renamed from Phase 1)
+- Phase 1d: Check git status (renamed from Phase 1)
+
 ## v0.1.1
 - Add BSD 2-Clause LICENSE file
 - Remove development-specific Makefile targets (run, run-verbose)
