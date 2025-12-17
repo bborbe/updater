@@ -1,0 +1,27 @@
+[project]
+name = "dependency-updater"
+version = "0.1.0"
+description = "Multi-language dependency updater with Claude-powered CHANGELOG and commit messages (Go, Python, Node, etc.)"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "claude-code-sdk>=0.0.25",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+    "pytest-mock>=3.12.0",
+]
+
+[project.scripts]
+update-deps = "updater.cli:main"
+
+[tool.uv]
+package = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+asyncio_mode = "auto"

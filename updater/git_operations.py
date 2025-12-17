@@ -1,0 +1,263 @@
+"""Git operations: status, commit, tag, branch management."""
+
+import subprocess
+from pathlib import Path
+from typing import Optional, Tuple
+
+from . import config
+from .exceptions import GitError
+
+
+def find_git_repo(path: Path) -> Optional[Path]:
+    """Find the git repository root by walking UP from the given path.
+
+    Args:
+        path: Starting path to search from
+
+    Returns:
+        Path to git repository root, or None if not found
+    """
+    current = Path(path).resolve()
+
+    while current != current.parent:
+        if (current / ".git").exists():
+            return current
+        current = current.parent
+
+    return None
+
+
+def ensure_gitignore_entry(module_path: Path, log_func) -> None:
+    """Ensure required entries are in module's .gitignore.
+
+    Adds (with leading / to match only at module root):
+    - /.update-logs/ (log directory)
+    - /.claude/ (Claude Code temp files)
+    - /CLAUDE.md (Claude Code local config)
+    - /.mcp-* (MCP server cache/state files)
+
+    Args:
+        module_path: Path to the module
+        log_func: Logging function to use
+    """
+    gitignore_path = module_path / ".gitignore"
+
+    # Entries to ensure (with leading / to match only at module root)
+    required_entries = [
+        f"/{config.LOG_DIR_NAME}/",
+        "/.claude/",
+        "/CLAUDE.md",
+        "/.mcp-*",
+    ]
+
+    # Read existing .gitignore or create empty list
+    if gitignore_path.exists():
+        with open(gitignore_path, 'r') as f:
+            lines = f.read().splitlines()
+    else:
+        lines = []
+
+    # Track which entries were added
+    added_entries = []
+
+    for entry in required_entries:
+        # Check if entry already exists (with or without trailing slash)
+        if entry in lines or entry.rstrip('/') in lines:
+            log_func(f"  ✓ {entry} already in .gitignore", to_console=config.VERBOSE_MODE)
+        else:
+            lines.append(entry)
+            added_entries.append(entry)
+
+    # Write back if any entries were added
+    if added_entries:
+        with open(gitignore_path, 'w') as f:
+            f.write('\n'.join(lines))
+            if lines:  # Add trailing newline if file has content
+                f.write('\n')
+
+        for entry in added_entries:
+            log_func(f"  ✓ Added {entry} to .gitignore", to_console=config.VERBOSE_MODE)
+
+
+def check_git_status(repo_path: Path) -> Tuple[int, list[str]]:
+    """Check git status and return (count, files_list).
+
+    Args:
+        repo_path: Path to git repository
+
+    Returns:
+        Tuple of (number of changed files, list of filenames)
+        Returns (-1, []) on error
+
+    Note:
+        Uses git status --porcelain format: XY PATH
+        where XY are status chars and PATH is filename
+    """
+    result = subprocess.run(
+        "git status --porcelain",
+        shell=True,
+        cwd=repo_path,
+        capture_output=True,
+        text=True
+    )
+
+    if result.returncode != 0:
+        return -1, []
+
+    lines = [line for line in result.stdout.strip().split('\n') if line]
+
+    # Parse porcelain format: XY PATH (status chars + whitespace + filename)
+    # Use split() without args to handle any amount of whitespace
+    files = []
+    for line in lines:
+        parts = line.split()  # Split on any whitespace
+        if len(parts) >= 2:
+            # parts[0] is status (e.g., "M", "MM", "??")
+            # parts[1] is filename
+            filename = parts[1]
+            files.append(filename)
+
+    return len(lines), files
+
+
+def update_git_branch(repo_path: Path) -> bool:
+    """Switch to master branch and pull latest changes.
+
+    Args:
+        repo_path: Path to git repository
+
+    Returns:
+        True on success, False on failure
+    """
+    # Get current branch
+    result = subprocess.run(
+        "git branch --show-current",
+        shell=True,
+        cwd=repo_path,
+        capture_output=True,
+        text=True
+    )
+
+    if result.returncode != 0:
+        print(f"  ✗ Failed to get current branch: {result.stderr}")
+        return False
+
+    current_branch = result.stdout.strip()
+
+    # Switch to master if not already there
+    if current_branch != "master":
+        print(f"  → Switching from {current_branch} to master")
+        result = subprocess.run(
+            "git checkout master",
+            shell=True,
+            cwd=repo_path,
+            capture_output=True,
+            text=True
+        )
+        if result.returncode != 0:
+            print(f"  ✗ Failed to checkout master: {result.stderr}")
+            return False
+
+    # Pull latest changes
+    result = subprocess.run(
+        "git pull",
+        shell=True,
+        cwd=repo_path,
+        capture_output=True,
+        text=True
+    )
+
+    if result.returncode != 0:
+        print(f"  ✗ Failed to pull: {result.stderr}")
+        return False
+
+    print(f"  ✓ Updated to latest master")
+    return True
+
+
+def git_commit(module_path: Path, message: str, log_func) -> None:
+    """Git add and commit changes.
+
+    Args:
+        module_path: Path to module
+        message: Commit message
+        log_func: Logging function to use
+
+    Raises:
+        GitError: If git command fails
+    """
+    from . import config
+    from .log_manager import run_command
+
+    log_func("\n=== Phase 5: Git Commit ===", to_console=True)
+
+    log_func("→ Git add", to_console=config.VERBOSE_MODE)
+    run_command("git add .", cwd=module_path, quiet=True, log_func=log_func)
+
+    log_func(f"→ Git commit: {message}", to_console=config.VERBOSE_MODE)
+    run_command(f'git commit -m "{message}"', cwd=module_path, quiet=True, log_func=log_func)
+
+    log_func("✓ Git commit completed", to_console=True)
+
+
+def git_tag_from_changelog(module_path: Path, log_func) -> None:
+    """Create git tag from CHANGELOG version.
+
+    Args:
+        module_path: Path to module
+        log_func: Logging function to use
+
+    Raises:
+        GitError: If git operations fail
+    """
+    import re
+    from . import config
+    from .log_manager import run_command
+
+    log_func("\n=== Phase 6: Git Tag ===", to_console=True)
+
+    # Check for uncommitted changes
+    check_result = subprocess.run(
+        "git diff-index --quiet HEAD --",
+        shell=True,
+        cwd=module_path
+    )
+
+    if check_result.returncode != 0:
+        log_func("⚠ There are uncommitted changes, skipping tag", to_console=True)
+        return
+
+    # Check if HEAD is already tagged
+    check_tagged = subprocess.run(
+        "git describe --tags --exact-match HEAD",
+        shell=True,
+        cwd=module_path,
+        capture_output=True
+    )
+
+    if check_tagged.returncode == 0:
+        log_func("⚠ HEAD is already tagged, skipping", to_console=True)
+        return
+
+    # Extract version from CHANGELOG
+    changelog_path = Path(module_path) / "CHANGELOG.md"
+
+    if not changelog_path.exists():
+        log_func("⚠ No CHANGELOG.md found, skipping tag", to_console=True)
+        return
+
+    with open(changelog_path, 'r') as f:
+        content = f.read()
+
+    version_match = re.search(r'##\s+(v\d+\.\d+\.\d+)', content)
+
+    if not version_match:
+        log_func("⚠ Could not find version in CHANGELOG.md", to_console=True)
+        return
+
+    tag = version_match.group(1)
+
+    log_func(f"→ Creating tag: {tag}", to_console=config.VERBOSE_MODE)
+    run_command(f'git tag -a {tag} -m "add version {tag}"', cwd=module_path, quiet=True, log_func=log_func)
+
+    log_func(f"✓ Tagged HEAD with: {tag}", to_console=True)
