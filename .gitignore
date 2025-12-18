@@ -41,3 +41,9 @@ uv.lock
 
 # OS
 .DS_Store
+
+# MCP
+.mcp.json
+
+# Claude Code
+/.claude
