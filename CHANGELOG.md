@@ -8,6 +8,11 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## v0.4.1
+- Fix summary header to show correct path or count for multiple input paths
+- Fix module list in summary to display full paths instead of just names
+- Hide Python tracebacks in error output unless verbose mode is enabled
+
 ## v0.4.0
 - Add support for multiple module paths as CLI arguments
 - Add automatic deduplication of discovered modules

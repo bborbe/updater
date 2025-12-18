@@ -202,7 +202,8 @@ async def process_single_module(module_path: Path) -> bool:
 
     except Exception as e:
         log_message(f"\n✗ Error processing {module_path}: {e}", to_console=True)
-        traceback.print_exc()
+        if config.VERBOSE_MODE:
+            traceback.print_exc()
         return False
     finally:
         # Close logging and cleanup old logs
@@ -418,24 +419,27 @@ async def main_async() -> int:
             print('#' * 70)
 
             success, status = await process_module_with_retry(mod)
-            results.append((mod.name, success, status))
+            results.append((mod, success, status))
 
         # Summary
         print("\n" + "=" * 70)
-        print(f"SUMMARY: {module_path}")
+        if len(module_paths) == 1:
+            print(f"SUMMARY: {module_paths[0]}")
+        else:
+            print(f"SUMMARY: {len(module_paths)} input path(s), {len(modules)} module(s)")
         print("=" * 70)
 
-        successful = [name for name, _, status in results if status == 'success']
-        skipped = [name for name, _, status in results if status == 'skipped']
+        successful = [mod for mod, _, status in results if status == 'success']
+        skipped = [mod for mod, _, status in results if status == 'skipped']
 
         print(f"\n✓ Successful: {len(successful)}/{len(modules)}")
-        for name in successful:
-            print(f"  - {name}")
+        for mod in successful:
+            print(f"  - {mod}")
 
         if skipped:
             print(f"\n⚠ Skipped: {len(skipped)}/{len(modules)}")
-            for name in skipped:
-                print(f"  - {name}")
+            for mod in skipped:
+                print(f"  - {mod}")
 
         print("\n" + "=" * 70)
 
