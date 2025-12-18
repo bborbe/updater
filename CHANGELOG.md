@@ -8,6 +8,12 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## v0.4.0
+- Add support for multiple module paths as CLI arguments
+- Add automatic deduplication of discovered modules
+- Improve module display to show full paths instead of names
+- Update documentation with multiple module usage examples
+
 ## v0.3.0
 - Add sound notifications for user interaction, completion, and errors
 - Add `--require-commit-confirm` CLI flag for manual commit approval

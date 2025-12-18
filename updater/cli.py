@@ -256,8 +256,10 @@ async def main_async() -> int:
         description='Update Go module dependencies, CHANGELOG, and create git tags'
     )
     parser.add_argument(
-        'module',
-        help='Path to Go module (e.g., lib/alert) or parent directory (e.g., lib)'
+        'modules',
+        nargs='*',
+        default=['.'],
+        help='Path(s) to Go module(s) or parent directories (default: current directory)'
     )
     parser.add_argument(
         '--verbose',
@@ -284,43 +286,51 @@ async def main_async() -> int:
     config.REQUIRE_CONFIRM = args.require_commit_confirm
     config.RUN_TIMESTAMP = datetime.now().strftime("%Y-%m-%d-%H%M%S")
 
-    # Resolve module path
-    module_path = Path(args.module)
-
-    if not module_path.exists():
-        print(f"✗ Module path does not exist: {module_path}")
-        play_completion_sound()
-        return 1
-
     # Step 1: Discover Go modules to update
     print("=== Step 1: Discover Go Modules ===\n")
 
-    # Check if this is a single module or parent directory
-    if (module_path / "go.mod").exists():
-        modules = [module_path]
-        print(f"Single module mode: {module_path}\n")
-    else:
-        # Search recursively to find all nested modules
-        modules = discover_go_modules(module_path, recursive=True)
-
-        if not modules:
-            print(f"✗ No Go modules found in: {module_path}")
+    # Resolve and validate all module paths
+    module_paths = []
+    for path_str in args.modules:
+        path = Path(path_str).resolve()
+        if not path.exists():
+            print(f"✗ Module path does not exist: {path}")
             play_completion_sound()
             return 1
+        module_paths.append(path)
 
-        if len(modules) > 1:
-            print(f"Multi-module mode: found {len(modules)} modules\n")
+    # Discover modules from each provided path
+    modules = []
+    for module_path in module_paths:
+        # Check if this is a single module or parent directory
+        if (module_path / "go.mod").exists():
+            modules.append(module_path)
         else:
-            print(f"Single module found: {modules[0].name}\n")
+            # Search recursively to find all nested modules
+            discovered = discover_go_modules(module_path, recursive=True)
+            modules.extend(discovered)
 
+    if not modules:
+        print(f"✗ No Go modules found in provided path(s)")
+        play_completion_sound()
+        return 1
+
+    # Remove duplicates while preserving order
+    seen = set()
+    unique_modules = []
+    for mod in modules:
+        if mod not in seen:
+            seen.add(mod)
+            unique_modules.append(mod)
+    modules = unique_modules
+
+    if len(modules) == 1:
+        print(f"Single module mode: {modules[0]}\n")
+    else:
+        print(f"Multi-module mode: found {len(modules)} modules\n")
         print(f"Found {len(modules)} Go module(s):\n")
         for i, mod in enumerate(modules, 1):
-            # Show relative path for better clarity in monorepo mode
-            try:
-                rel_path = mod.relative_to(module_path)
-                print(f"  {i}. {rel_path}")
-            except ValueError:
-                print(f"  {i}. {mod.name}")
+            print(f"  {i}. {mod}")
         print()
 
     # Find unique git repos for the modules we're processing

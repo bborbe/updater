@@ -11,7 +11,10 @@ From GitHub:
 # Single module
 uvx github.com/bborbe/updater update-deps /path/to/module
 
-# Multiple modules (discovers all recursively, including nested)
+# Multiple specific modules (explicit paths)
+uvx github.com/bborbe/updater update-deps /path/to/moduleA /path/to/moduleB /path/to/moduleC
+
+# Parent directory (discovers all recursively, including nested)
 uvx github.com/bborbe/updater update-deps /path/to/modules
 
 # Monorepo (discovers all nested modules with smart ordering)
@@ -26,6 +29,9 @@ uv --directory /path/to/updater run update-deps /path/to/module --verbose
 
 # Or with uvx --reinstall (picks up latest changes)
 uvx --reinstall --from /path/to/updater update-deps /path/to/module --verbose
+
+# Multiple specific modules
+uvx --reinstall --from /path/to/updater update-deps ~/workspace/raw ~/workspace/k8s ~/workspace/jira
 ```
 
 ## Usage
@@ -47,6 +53,12 @@ uvx github.com/bborbe/updater update-deps /path/to/module --verbose
 
 # Choose Claude model (default: sonnet)
 uvx github.com/bborbe/updater update-deps /path/to/module --model haiku
+
+# Require confirmation before commits (default: auto-commit)
+uvx github.com/bborbe/updater update-deps /path/to/module --require-commit-confirm
+
+# Multiple modules with options
+uvx github.com/bborbe/updater update-deps /path/to/module1 /path/to/module2 --verbose
 ```
 
 ### Retry/Skip on Failure
