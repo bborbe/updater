@@ -8,6 +8,14 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## v0.3.0
+- Add sound notifications for user interaction, completion, and errors
+- Add `--require-commit-confirm` CLI flag for manual commit approval
+- Add clean Claude config directory to bypass global hooks
+- Add MCP semantic-search server integration
+- Improve error messages with full module paths instead of names
+- Update summary header to show full module path
+
 ## v0.2.2
 - Add k8s.io v0.35.0 to standard go.mod excludes
 - Update .gitignore to exclude .mcp.json and .claude/

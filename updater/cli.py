@@ -29,6 +29,8 @@ from .log_manager import (
 )
 from .module_discovery import discover_go_modules
 from .prompts import prompt_skip_or_retry, prompt_yes_no
+from .sound import play_error_sound
+from .sound import play_completion_sound
 from .version_updater import update_versions
 
 
@@ -132,11 +134,12 @@ async def process_single_module(module_path: Path) -> bool:
             print("\nNote: No version bump or tag (infrastructure changes only)")
             print("=" * 60)
 
-            # Ask for confirmation
-            if not prompt_yes_no("\nProceed with commit (no tag)?", default_yes=True):
-                log_message("\n⚠ Skipped by user", to_console=True)
-                log_message("  Changes are staged but not committed", to_console=True)
-                return True
+            # Ask for confirmation if required
+            if config.REQUIRE_CONFIRM:
+                if not prompt_yes_no("\nProceed with commit (no tag)?", default_yes=True):
+                    log_message("\n⚠ Skipped by user", to_console=True)
+                    log_message("  Changes are staged but not committed", to_console=True)
+                    return True
 
             git_commit(module_path, analysis['commit_message'], log_func=log_message)
             log_message("\n✓ Commit completed successfully (no tag)!", to_console=True)
@@ -159,11 +162,12 @@ async def process_single_module(module_path: Path) -> bool:
             print("\nNote: No CHANGELOG.md found, no version tag will be created")
             print("=" * 60)
 
-            # Ask for confirmation
-            if not prompt_yes_no("\nProceed with commit (no tag)?", default_yes=True):
-                log_message("\n⚠ Skipped by user", to_console=True)
-                log_message("  Changes are staged but not committed", to_console=True)
-                return True
+            # Ask for confirmation if required
+            if config.REQUIRE_CONFIRM:
+                if not prompt_yes_no("\nProceed with commit (no tag)?", default_yes=True):
+                    log_message("\n⚠ Skipped by user", to_console=True)
+                    log_message("  Changes are staged but not committed", to_console=True)
+                    return True
 
             git_commit(module_path, analysis['commit_message'], log_func=log_message)
             log_message("\n✓ Commit completed successfully (no tag)!", to_console=True)
@@ -184,11 +188,12 @@ async def process_single_module(module_path: Path) -> bool:
             print(f"  - {bullet.lstrip('- ')}")
         print("=" * 60)
 
-        # Ask for confirmation
-        if not prompt_yes_no("\nProceed with commit and tag?", default_yes=True):
-            log_message("\n⚠ Skipped by user", to_console=True)
-            log_message("  Changes are staged but not committed", to_console=True)
-            return True
+        # Ask for confirmation if required
+        if config.REQUIRE_CONFIRM:
+            if not prompt_yes_no("\nProceed with commit and tag?", default_yes=True):
+                log_message("\n⚠ Skipped by user", to_console=True)
+                log_message("  Changes are staged but not committed", to_console=True)
+                return True
 
         git_commit(module_path, analysis['commit_message'], log_func=log_message)
         git_tag_from_changelog(module_path, log_func=log_message)
@@ -196,7 +201,7 @@ async def process_single_module(module_path: Path) -> bool:
         return True
 
     except Exception as e:
-        log_message(f"\n✗ Error processing {module_path.name}: {e}", to_console=True)
+        log_message(f"\n✗ Error processing {module_path}: {e}", to_console=True)
         traceback.print_exc()
         return False
     finally:
@@ -219,7 +224,7 @@ async def process_module_with_retry(module_path: Path) -> tuple[bool, str]:
 
     while True:
         if attempt > 1:
-            print(f"\n=== Retrying {module_path.name} (attempt {attempt}) ===\n")
+            print(f"\n=== Retrying {module_path} (attempt {attempt}) ===\n")
 
         success = await process_single_module(module_path)
 
@@ -227,13 +232,14 @@ async def process_module_with_retry(module_path: Path) -> tuple[bool, str]:
             return True, 'success'
 
         # Failed - prompt for skip or retry
-        print(f"\n✗ Module {module_path.name} failed")
+        play_error_sound()
+        print(f"\n✗ Module {module_path} failed")
         print("  → Fix the issues and retry, or skip this module")
 
         choice = prompt_skip_or_retry()
 
         if choice == 'skip':
-            print(f"⚠ Skipping {module_path.name}\n")
+            print(f"⚠ Skipping {module_path}\n")
             return False, 'skipped'
 
         # Retry - increment attempt counter
@@ -264,12 +270,18 @@ async def main_async() -> int:
         default='sonnet',
         help='Claude model to use (default: sonnet)'
     )
+    parser.add_argument(
+        '--require-commit-confirm',
+        action='store_true',
+        help='Require user confirmation before committing (default: auto-commit)'
+    )
 
     args = parser.parse_args()
 
     # Set global state
     config.VERBOSE_MODE = args.verbose
     config.MODEL = args.model
+    config.REQUIRE_CONFIRM = args.require_commit_confirm
     config.RUN_TIMESTAMP = datetime.now().strftime("%Y-%m-%d-%H%M%S")
 
     # Resolve module path
@@ -277,6 +289,7 @@ async def main_async() -> int:
 
     if not module_path.exists():
         print(f"✗ Module path does not exist: {module_path}")
+        play_completion_sound()
         return 1
 
     # Step 1: Discover Go modules to update
@@ -292,6 +305,7 @@ async def main_async() -> int:
 
         if not modules:
             print(f"✗ No Go modules found in: {module_path}")
+            play_completion_sound()
             return 1
 
         if len(modules) > 1:
@@ -334,6 +348,7 @@ async def main_async() -> int:
         for repo in update_errors:
             print(f"  - {repo}")
         print("\nCannot proceed. Please fix errors and try again.")
+        play_completion_sound()
         return 1
 
     # Step 3: Check for uncommitted changes in module directories
@@ -346,6 +361,7 @@ async def main_async() -> int:
 
         if change_count == -1:
             print(f"✗ Failed to check status: {module.name}")
+            play_completion_sound()
             return 1
 
         if change_count > 0:
@@ -365,6 +381,7 @@ async def main_async() -> int:
 
         if not prompt_yes_no("Continue anyway?", default_yes=True):
             print("\n✗ Aborted by user")
+            play_completion_sound()
             return 1
         print()
     else:
@@ -377,6 +394,7 @@ async def main_async() -> int:
         # Single module mode
         print(f"=== Updating Go Module: {modules[0]} ===\n")
         success, status = await process_module_with_retry(modules[0])
+        play_completion_sound()
         return 0 if success else 1
 
     else:
@@ -394,7 +412,7 @@ async def main_async() -> int:
 
         # Summary
         print("\n" + "=" * 70)
-        print("SUMMARY")
+        print(f"SUMMARY: {module_path}")
         print("=" * 70)
 
         successful = [name for name, _, status in results if status == 'success']
@@ -412,6 +430,7 @@ async def main_async() -> int:
         print("\n" + "=" * 70)
 
         # Exit with success (skipped modules are not errors)
+        play_completion_sound()
         return 0
 
 

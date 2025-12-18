@@ -11,6 +11,7 @@ VERBOSE_MODE = False
 RUN_TIMESTAMP = None
 LOG_FILE_HANDLE = None
 MODEL = None  # Claude model to use (sonnet, opus, haiku)
+REQUIRE_CONFIRM = False  # Require user confirmation before commits
 
 # Go updater configuration
 GO_MAX_ITERATIONS = 10

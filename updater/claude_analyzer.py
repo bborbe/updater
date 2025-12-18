@@ -124,8 +124,22 @@ Example 3 - ONLY infrastructure changes (no dependencies, no code):
     os.chdir(module_path)
 
     try:
+        # Use dedicated clean config directory to bypass hooks from ~/.claude/settings.json
+        clean_config_dir = Path.home() / ".claude-clean"
+        clean_config_dir.mkdir(exist_ok=True)
+
+        # Create minimal settings.json without hooks
+        settings_path = clean_config_dir / "settings.json"
+        if not settings_path.exists():
+            settings_path.write_text(json.dumps({"permissions": {"allowedCommands": []}}))
+
+        # Use clean config directory (requires one-time login)
+        env = os.environ.copy()
+        env["CLAUDE_CONFIG_DIR"] = str(clean_config_dir)
+
         options = ClaudeCodeOptions(
             model=config.MODEL,
+            env=env,
         )
 
         response_text = ""
