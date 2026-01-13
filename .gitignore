@@ -46,5 +46,5 @@ uv.lock
 .mcp.json
 
 # Claude Code
-/.claude/g
+/.claude/
 /.mcp-*
