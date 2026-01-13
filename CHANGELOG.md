@@ -8,6 +8,13 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## v0.5.0
+- Add comprehensive test suite (75 new tests covering CLI, Claude analyzer, Go updater, module discovery)
+- Restructure project to src/ layout for better packaging
+- Improve type hints and exception handling throughout codebase
+- Expand development documentation with testing guidelines
+- Exclude .claude directory from version control
+
 ## v0.4.1
 - Fix summary header to show correct path or count for multiple input paths
 - Fix module list in summary to display full paths instead of just names
