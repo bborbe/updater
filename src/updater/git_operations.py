@@ -1,13 +1,13 @@
 """Git operations: status, commit, tag, branch management."""
 
 import subprocess
+from collections.abc import Callable
 from pathlib import Path
-from typing import Optional, Tuple
 
 from . import config
 
 
-def find_git_repo(path: Path) -> Optional[Path]:
+def find_git_repo(path: Path) -> Path | None:
     """Find the git repository root by walking UP from the given path.
 
     Args:
@@ -26,7 +26,7 @@ def find_git_repo(path: Path) -> Optional[Path]:
     return None
 
 
-def ensure_gitignore_entry(module_path: Path, log_func) -> None:
+def ensure_gitignore_entry(module_path: Path, log_func: Callable[..., None]) -> None:
     """Ensure required entries are in module's .gitignore.
 
     Adds (with leading / to match only at module root):
@@ -51,7 +51,7 @@ def ensure_gitignore_entry(module_path: Path, log_func) -> None:
 
     # Read existing .gitignore or create empty list
     if gitignore_path.exists():
-        with open(gitignore_path, "r") as f:
+        with open(gitignore_path) as f:
             lines = f.read().splitlines()
     else:
         lines = []
@@ -62,9 +62,7 @@ def ensure_gitignore_entry(module_path: Path, log_func) -> None:
     for entry in required_entries:
         # Check if entry already exists (with or without trailing slash)
         if entry in lines or entry.rstrip("/") in lines:
-            log_func(
-                f"  ✓ {entry} already in .gitignore", to_console=config.VERBOSE_MODE
-            )
+            log_func(f"  ✓ {entry} already in .gitignore", to_console=config.VERBOSE_MODE)
         else:
             lines.append(entry)
             added_entries.append(entry)
@@ -80,7 +78,7 @@ def ensure_gitignore_entry(module_path: Path, log_func) -> None:
             log_func(f"  ✓ Added {entry} to .gitignore", to_console=config.VERBOSE_MODE)
 
 
-def check_git_status(path: Path) -> Tuple[int, list[str]]:
+def check_git_status(path: Path) -> tuple[int, list[str]]:
     """Check git status and return (count, files_list).
 
     Args:
@@ -135,9 +133,7 @@ def check_git_status(path: Path) -> Tuple[int, list[str]]:
                 try:
                     rel_path = path.resolve().relative_to(git_repo.resolve())
                     # Only include files that start with this relative path
-                    if not filename.startswith(str(rel_path) + "/") and filename != str(
-                        rel_path
-                    ):
+                    if not filename.startswith(str(rel_path) + "/") and filename != str(rel_path):
                         continue
                 except ValueError:
                     # path is not under git_repo, shouldn't happen
@@ -187,9 +183,7 @@ def update_git_branch(repo_path: Path) -> bool:
             return False
 
     # Pull latest changes
-    result = subprocess.run(
-        "git pull", shell=True, cwd=repo_path, capture_output=True, text=True
-    )
+    result = subprocess.run("git pull", shell=True, cwd=repo_path, capture_output=True, text=True)
 
     if result.returncode != 0:
         print(f"  ✗ Failed to pull: {result.stderr}")
@@ -199,7 +193,7 @@ def update_git_branch(repo_path: Path) -> bool:
     return True
 
 
-def git_commit(module_path: Path, message: str, log_func) -> None:
+def git_commit(module_path: Path, message: str, log_func: Callable[..., None]) -> None:
     """Git add and commit changes.
 
     Args:
@@ -219,14 +213,12 @@ def git_commit(module_path: Path, message: str, log_func) -> None:
     run_command("git add .", cwd=module_path, quiet=True, log_func=log_func)
 
     log_func(f"→ Git commit: {message}", to_console=config.VERBOSE_MODE)
-    run_command(
-        f'git commit -m "{message}"', cwd=module_path, quiet=True, log_func=log_func
-    )
+    run_command(f'git commit -m "{message}"', cwd=module_path, quiet=True, log_func=log_func)
 
     log_func("✓ Git commit completed", to_console=True)
 
 
-def git_tag_from_changelog(module_path: Path, log_func) -> None:
+def git_tag_from_changelog(module_path: Path, log_func: Callable[..., None]) -> None:
     """Create git tag from CHANGELOG version.
 
     Args:
@@ -237,15 +229,14 @@ def git_tag_from_changelog(module_path: Path, log_func) -> None:
         GitError: If git operations fail
     """
     import re
+
     from . import config
     from .log_manager import run_command
 
     log_func("\n=== Phase 6: Git Tag ===", to_console=True)
 
     # Check for uncommitted changes
-    check_result = subprocess.run(
-        "git diff-index --quiet HEAD --", shell=True, cwd=module_path
-    )
+    check_result = subprocess.run("git diff-index --quiet HEAD --", shell=True, cwd=module_path)
 
     if check_result.returncode != 0:
         log_func("⚠ There are uncommitted changes, skipping tag", to_console=True)
@@ -270,7 +261,7 @@ def git_tag_from_changelog(module_path: Path, log_func) -> None:
         log_func("⚠ No CHANGELOG.md found, skipping tag", to_console=True)
         return
 
-    with open(changelog_path, "r") as f:
+    with open(changelog_path) as f:
         content = f.read()
 
     version_match = re.search(r"##\s+(v\d+\.\d+\.\d+)", content)

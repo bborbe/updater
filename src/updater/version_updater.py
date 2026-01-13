@@ -2,8 +2,8 @@
 
 import json
 import re
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable
 
 import httpx
 import yaml
@@ -71,7 +71,7 @@ def get_latest_alpine_version() -> str | None:
 
 
 def update_dockerfile_golang(
-    module_path: Path, new_version: str, log_func: Callable = log_message
+    module_path: Path, new_version: str, log_func: Callable[..., None] = log_message
 ) -> bool:
     """Update golang version in Dockerfile.
 
@@ -94,7 +94,7 @@ def update_dockerfile_golang(
     # Replace with new version but keep any suffix and AS clause
     pattern = r"FROM golang:(\d+\.\d+\.\d+)([-\w.]*)(\s+AS\s+\w+)?"
 
-    def replace_version(match):
+    def replace_version(match: re.Match[str]) -> str:
         suffix = match.group(2) if match.group(2) else ""
         as_clause = match.group(3) if match.group(3) else ""
         return f"FROM golang:{new_version}{suffix}{as_clause}"
@@ -110,7 +110,7 @@ def update_dockerfile_golang(
 
 
 def update_dockerfile_alpine(
-    module_path: Path, new_version: str, log_func: Callable = log_message
+    module_path: Path, new_version: str, log_func: Callable[..., None] = log_message
 ) -> bool:
     """Update alpine version in Dockerfile.
 
@@ -132,7 +132,7 @@ def update_dockerfile_alpine(
     # Pattern: FROM alpine:3.19 or FROM alpine:3.19.1 or FROM alpine:3.19 AS alpine
     pattern = r"FROM alpine:(\d+\.\d+(?:\.\d+)?)(\s+AS\s+\w+)?"
 
-    def replace_version(match):
+    def replace_version(match: re.Match[str]) -> str:
         as_clause = match.group(2) if match.group(2) else ""
         return f"FROM alpine:{new_version}{as_clause}"
 
@@ -147,7 +147,7 @@ def update_dockerfile_alpine(
 
 
 def update_gomod_version(
-    module_path: Path, new_version: str, log_func: Callable = log_message
+    module_path: Path, new_version: str, log_func: Callable[..., None] = log_message
 ) -> bool:
     """Update go version in go.mod.
 
@@ -192,7 +192,7 @@ def update_gomod_version(
 
 
 def update_github_workflows_golang(
-    module_path: Path, new_version: str, log_func: Callable = log_message
+    module_path: Path, new_version: str, log_func: Callable[..., None] = log_message
 ) -> bool:
     """Update golang version in GitHub Actions workflows.
 
@@ -217,7 +217,7 @@ def update_github_workflows_golang(
         # Pattern: go-version: '1.23.4' or go-version: "1.23.4" or go-version: 1.23.4
         pattern = r"go-version:\s*['\"]?(\d+\.\d+\.\d+)['\"]?"
 
-        def replace_version(match):
+        def replace_version(match: re.Match[str]) -> str:
             # Preserve the quote style (or lack thereof)
             if "'" in match.group(0):
                 return f"go-version: '{new_version}'"
@@ -239,7 +239,7 @@ def update_github_workflows_golang(
     return any_updates
 
 
-def update_versions(module_path: Path, log_func: Callable = log_message) -> bool:
+def update_versions(module_path: Path, log_func: Callable[..., None] = log_message) -> bool:
     """Check and update golang and alpine versions if needed.
 
     Args:

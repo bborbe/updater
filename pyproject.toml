@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "Multi-language dependency updater with Claude-powered CHANGELOG and commit messages (Go, Python, Node, etc.)"
 readme = "README.md"
 requires-python = ">=3.12"
+license = { text = "BSD-2-Clause" }
 dependencies = [
     "claude-code-sdk>=0.0.25",
     "httpx>=0.28.1",
@@ -30,3 +31,29 @@ package = true
 testpaths = ["tests"]
 python_files = ["test_*.py"]
 asyncio_mode = "auto"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = [
+    "E",      # pycodestyle errors
+    "W",      # pycodestyle warnings
+    "F",      # pyflakes
+    "I",      # isort
+    "B",      # flake8-bugbear
+    "C4",     # flake8-comprehensions
+    "UP",     # pyupgrade
+]
+ignore = [
+    "E501",   # line too long (handled by formatter)
+]
+
+[tool.mypy]
+python_version = "3.12"
+disallow_untyped_defs = true
+warn_return_any = false
+warn_unused_ignores = true
+no_implicit_optional = true
+check_untyped_defs = true

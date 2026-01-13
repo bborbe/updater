@@ -50,7 +50,7 @@ lint:
 # Type check with mypy
 typecheck:
 	@echo "Running mypy..."
-	@uv run mypy updater/ --no-error-summary
+	@uv run mypy src/updater/ --no-error-summary
 
 .PHONY: check
 # Run lint and typecheck
@@ -61,7 +61,7 @@ check: lint typecheck
 clean:
 	rm -rf .pytest_cache .mypy_cache .ruff_cache
 	rm -rf .venv dist *.egg-info
-	rm -rf updater/__pycache__
+	rm -rf src/updater/__pycache__
 	rm -rf tests/__pycache__
 	find . -type d -name "*.egg-info" -exec rm -rf {} +
 	find . -type d -name "__pycache__" -exec rm -rf {} +

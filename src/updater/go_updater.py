@@ -1,13 +1,13 @@
 """Go dependency updater."""
 
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable
 
 from . import config
 from .log_manager import log_message, run_command
 
 
-def update_go_dependencies(module_path: Path, log_func: Callable = log_message) -> bool:
+def update_go_dependencies(module_path: Path, log_func: Callable[..., None] = log_message) -> bool:
     """Iteratively update Go dependencies until stable.
 
     Args:
@@ -42,9 +42,7 @@ def update_go_dependencies(module_path: Path, log_func: Callable = log_message) 
         outdated_modules = [line for line in result.stdout.strip().split("\n") if line]
 
         if not outdated_modules:
-            log_func(
-                "✓ All dependencies are up to date", to_console=config.VERBOSE_MODE
-            )
+            log_func("✓ All dependencies are up to date", to_console=config.VERBOSE_MODE)
             break
 
         log_func(
@@ -94,7 +92,7 @@ def update_go_dependencies(module_path: Path, log_func: Callable = log_message) 
     return True
 
 
-def run_precommit(module_path: Path, log_func: Callable = log_message) -> None:
+def run_precommit(module_path: Path, log_func: Callable[..., None] = log_message) -> None:
     """Run make precommit.
 
     Args:

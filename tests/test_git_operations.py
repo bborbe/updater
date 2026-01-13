@@ -64,9 +64,7 @@ def test_check_git_status_error(tmp_path):
         patch("subprocess.run") as mock_run,
     ):
         mock_find.return_value = tmp_path
-        mock_run.return_value = Mock(
-            returncode=1, stdout="", stderr="fatal: not a git repository"
-        )
+        mock_run.return_value = Mock(returncode=1, stdout="", stderr="fatal: not a git repository")
 
         count, files = check_git_status(tmp_path)
 

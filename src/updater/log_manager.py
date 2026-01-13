@@ -1,13 +1,13 @@
 """Logging setup, management, and cleanup."""
 
 import subprocess
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable, Optional
 
 from . import config
 
 
-def setup_module_logging(module_path: Path) -> Optional[Path]:
+def setup_module_logging(module_path: Path) -> Path | None:
     """Setup logging for a module. Returns log file path.
 
     Args:
@@ -43,7 +43,7 @@ def close_module_logging() -> None:
         config.LOG_FILE_HANDLE = None
 
 
-def cleanup_old_logs(module_path: Path, keep_count: Optional[int] = None) -> None:
+def cleanup_old_logs(module_path: Path, keep_count: int | None = None) -> None:
     """Keep only the most recent N log files per module.
 
     Args:
@@ -59,9 +59,7 @@ def cleanup_old_logs(module_path: Path, keep_count: Optional[int] = None) -> Non
         return
 
     # Get all log files sorted by modification time (newest first)
-    log_files = sorted(
-        log_dir.glob("*.log"), key=lambda f: f.stat().st_mtime, reverse=True
-    )
+    log_files = sorted(log_dir.glob("*.log"), key=lambda f: f.stat().st_mtime, reverse=True)
 
     # Remove old logs (keep only keep_count most recent)
     for old_log in log_files[keep_count:]:
@@ -85,10 +83,10 @@ def log_message(message: str, to_console: bool = True) -> None:
 
 def run_command(
     cmd: str,
-    cwd: Optional[Path] = None,
+    cwd: Path | None = None,
     capture_output: bool = False,
     quiet: bool = False,
-    log_func: Callable = log_message,
+    log_func: Callable[..., None] = log_message,
 ) -> subprocess.CompletedProcess:
     """Execute shell command and return result.
 
@@ -122,9 +120,7 @@ def run_command(
         log_func(result.stderr, to_console=config.VERBOSE_MODE and not quiet)
 
     if result.returncode != 0:
-        log_func(
-            f"✗ Command failed with exit code {result.returncode}", to_console=True
-        )
+        log_func(f"✗ Command failed with exit code {result.returncode}", to_console=True)
         if result.stdout:
             log_func(f"  stdout: {result.stdout}", to_console=True)
         if result.stderr:

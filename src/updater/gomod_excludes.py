@@ -1,10 +1,9 @@
 """Go module excludes and replaces management."""
 
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable
 
 from .log_manager import log_message, run_command
-
 
 # Standard exclusions for problematic versions
 STANDARD_EXCLUDES = [
@@ -124,9 +123,7 @@ def read_gomod_excludes_and_replaces(
             if "=>" in stripped:
                 parts = stripped.split("=>")
                 if len(parts) == 2:
-                    old = (
-                        parts[0].strip().split()[0]
-                    )  # Get just module name, ignore version
+                    old = parts[0].strip().split()[0]  # Get just module name, ignore version
                     new = parts[1].strip()
                     replaces[old] = new
         elif stripped.startswith("replace "):
@@ -135,9 +132,7 @@ def read_gomod_excludes_and_replaces(
             if "=>" in rest:
                 parts = rest.split("=>")
                 if len(parts) == 2:
-                    old = (
-                        parts[0].strip().split()[0]
-                    )  # Get just module name, ignore version
+                    old = parts[0].strip().split()[0]  # Get just module name, ignore version
                     new = parts[1].strip()
                     replaces[old] = new
 
@@ -145,7 +140,7 @@ def read_gomod_excludes_and_replaces(
 
 
 def apply_gomod_excludes_and_replaces(
-    module_path: Path, log_func: Callable = log_message
+    module_path: Path, log_func: Callable[..., None] = log_message
 ) -> bool:
     """Apply standard excludes and replaces to go.mod if not already present.
 

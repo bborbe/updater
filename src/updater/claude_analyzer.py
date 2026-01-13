@@ -3,8 +3,9 @@
 import asyncio
 import json
 import os
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable, Dict
+from typing import Any
 
 from claude_code_sdk import (
     AssistantMessage,
@@ -19,8 +20,8 @@ from .log_manager import log_message
 
 
 async def analyze_changes_with_claude(
-    module_path: Path, log_func: Callable = log_message
-) -> Dict[str, Any]:
+    module_path: Path, log_func: Callable[..., None] = log_message
+) -> dict[str, Any]:
     """Ask Claude to analyze changes and suggest version bump + changelog bullets.
 
     Creates a new Claude session for each module to ensure clean analysis.
@@ -130,9 +131,7 @@ Example 3 - ONLY infrastructure changes (no dependencies, no code):
         # Create minimal settings.json without hooks
         settings_path = clean_config_dir / "settings.json"
         if not settings_path.exists():
-            settings_path.write_text(
-                json.dumps({"permissions": {"allowedCommands": []}})
-            )
+            settings_path.write_text(json.dumps({"permissions": {"allowedCommands": []}}))
 
         # Use clean config directory (requires one-time login)
         env = os.environ.copy()
@@ -177,7 +176,7 @@ Example 3 - ONLY infrastructure changes (no dependencies, no code):
         except json.JSONDecodeError as e:
             raise ClaudeError(
                 f"Failed to parse Claude response as JSON: {e}\nResponse: {response_text}"
-            )
+            ) from e
 
         return {
             "version_bump": analysis.get("version_bump", "patch"),

@@ -28,8 +28,7 @@ from .log_manager import (
 )
 from .module_discovery import discover_go_modules
 from .prompts import prompt_skip_or_retry, prompt_yes_no
-from .sound import play_error_sound
-from .sound import play_completion_sound
+from .sound import play_completion_sound, play_error_sound
 from .version_updater import update_versions
 
 
@@ -68,12 +67,8 @@ async def process_single_module(module_path: Path) -> bool:
         version_updates = update_versions(module_path, log_func=log_message)
 
         # Phase 1b: Apply standard excludes and replaces
-        log_message(
-            "\n=== Phase 1b: Apply Standard Excludes/Replaces ===", to_console=True
-        )
-        excludes_updates = apply_gomod_excludes_and_replaces(
-            module_path, log_func=log_message
-        )
+        log_message("\n=== Phase 1b: Apply Standard Excludes/Replaces ===", to_console=True)
+        excludes_updates = apply_gomod_excludes_and_replaces(module_path, log_func=log_message)
 
         # Phase 1c: Update dependencies
         dep_updates = update_go_dependencies(module_path, log_func=log_message)
@@ -84,15 +79,11 @@ async def process_single_module(module_path: Path) -> bool:
         change_count, files = check_git_status(module_path)
 
         if change_count == 0 and not updates_made:
-            log_message(
-                "\n✓ No updates needed - module is already up to date", to_console=True
-            )
+            log_message("\n✓ No updates needed - module is already up to date", to_console=True)
             return True
 
         if change_count == 0:
-            log_message(
-                "\n✓ No changes detected after dependency update", to_console=True
-            )
+            log_message("\n✓ No changes detected after dependency update", to_console=True)
             return True
 
         if updates_made:
@@ -124,9 +115,7 @@ async def process_single_module(module_path: Path) -> bool:
             )
             return True
 
-        log_message(
-            f"→ {change_count} file(s) changed after precommit", to_console=True
-        )
+        log_message(f"→ {change_count} file(s) changed after precommit", to_console=True)
 
         # Show condensed file list if 20 or fewer lines
         condensed_files = condense_file_list(files)
@@ -157,13 +146,9 @@ async def process_single_module(module_path: Path) -> bool:
 
             # Ask for confirmation if required
             if config.REQUIRE_CONFIRM:
-                if not prompt_yes_no(
-                    "\nProceed with commit (no tag)?", default_yes=True
-                ):
+                if not prompt_yes_no("\nProceed with commit (no tag)?", default_yes=True):
                     log_message("\n⚠ Skipped by user", to_console=True)
-                    log_message(
-                        "  Changes are staged but not committed", to_console=True
-                    )
+                    log_message("  Changes are staged but not committed", to_console=True)
                     return True
 
             git_commit(module_path, analysis["commit_message"], log_func=log_message)
@@ -175,9 +160,7 @@ async def process_single_module(module_path: Path) -> bool:
 
         if not changelog_path.exists():
             # No CHANGELOG.md - commit without tag
-            log_message(
-                "\n→ No CHANGELOG.md found, committing without tag", to_console=True
-            )
+            log_message("\n→ No CHANGELOG.md found, committing without tag", to_console=True)
 
             print("\n" + "=" * 60)
             print(f"READY TO COMMIT: {module_path.name}")
@@ -191,13 +174,9 @@ async def process_single_module(module_path: Path) -> bool:
 
             # Ask for confirmation if required
             if config.REQUIRE_CONFIRM:
-                if not prompt_yes_no(
-                    "\nProceed with commit (no tag)?", default_yes=True
-                ):
+                if not prompt_yes_no("\nProceed with commit (no tag)?", default_yes=True):
                     log_message("\n⚠ Skipped by user", to_console=True)
-                    log_message(
-                        "  Changes are staged but not committed", to_console=True
-                    )
+                    log_message("  Changes are staged but not committed", to_console=True)
                     return True
 
             git_commit(module_path, analysis["commit_message"], log_func=log_message)
@@ -205,9 +184,7 @@ async def process_single_module(module_path: Path) -> bool:
             return True
 
         # CHANGELOG.md exists - update and create tag
-        new_version = update_changelog_with_suggestions(
-            module_path, analysis, log_func=log_message
-        )
+        new_version = update_changelog_with_suggestions(module_path, analysis, log_func=log_message)
 
         # Show summary and ask for confirmation (always to console)
         print("\n" + "=" * 60)
@@ -459,9 +436,7 @@ async def main_async() -> int:
         if len(module_paths) == 1:
             print(f"SUMMARY: {module_paths[0]}")
         else:
-            print(
-                f"SUMMARY: {len(module_paths)} input path(s), {len(modules)} module(s)"
-            )
+            print(f"SUMMARY: {len(module_paths)} input path(s), {len(modules)} module(s)")
         print("=" * 70)
 
         successful = [mod for mod, _, status in results if status == "success"]
