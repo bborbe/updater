@@ -1,17 +1,32 @@
 # Development Guide
 
+## Prerequisites
+
+### Install uv
+
+This project uses **uv** for Python version management, dependency installation, and execution.
+
+```bash
+# macOS/Linux
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Or with Homebrew
+brew install uv
+
+# Verify installation
+uv --version
+```
+
+**Note**: This project does NOT use pyenv. If you have pyenv installed, see [Migrating from pyenv](#migrating-from-pyenv) below.
+
 ## Installation
 
 ```bash
-# Install with uv
+# Install dependencies (including dev tools: ruff, mypy, pytest)
 make install
 
-# Install with test dependencies
-make install-dev
-
 # Or manually
-uv sync
-uv sync --all-extras  # with test dependencies
+uv sync --all-extras
 ```
 
 ## Running Tests
@@ -26,6 +41,25 @@ make test-verbose
 # Or manually
 uv run pytest
 uv run pytest -v
+```
+
+## Code Quality Checks
+
+```bash
+# Run all precommit checks (format, test, lint, typecheck)
+make precommit
+
+# Format code with ruff
+make format
+
+# Lint code with ruff
+make lint
+
+# Type check with mypy
+make typecheck
+
+# Run lint + typecheck
+make check
 ```
 
 ## Local Development
@@ -68,7 +102,77 @@ updater/
 
 ## Requirements
 
-- Python 3.12+
+- Python 3.12+ (managed by uv)
 - `ANTHROPIC_API_KEY` environment variable must be set
 - Git repository
 - For Go modules: CHANGELOG.md in the module/package
+
+## Migrating from pyenv
+
+If you previously used pyenv, here's how to migrate to uv-only:
+
+### 1. Install uv
+
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+### 2. Remove pyenv from shell PATH
+
+**For zsh (~/.zshrc)**:
+```bash
+# Comment out or remove these lines:
+# export PYENV_ROOT="$HOME/.pyenv"
+# export PATH="$PYENV_ROOT/bin:$PATH"
+# eval "$(pyenv init -)"
+# eval "$(pyenv virtualenv-init -)"
+
+# Reload shell
+source ~/.zshrc
+```
+
+**For bash (~/.bashrc or ~/.bash_profile)**:
+```bash
+# Comment out or remove these lines:
+# export PYENV_ROOT="$HOME/.pyenv"
+# export PATH="$PYENV_ROOT/bin:$PATH"
+# eval "$(pyenv init -)"
+# eval "$(pyenv virtualenv-init -)"
+
+# Reload shell
+source ~/.bashrc
+```
+
+### 3. Verify uv is working
+
+```bash
+# uv should now handle Python versions automatically
+uv --version
+
+# Install project dependencies
+cd /path/to/updater
+uv sync --all-extras
+
+# Run tools through uv
+uv run pytest
+uv run ruff check .
+uv run mypy updater/
+```
+
+### 4. Optional: Remove pyenv installation
+
+```bash
+# Only if you're completely done with pyenv
+rm -rf ~/.pyenv
+
+# Remove from homebrew if installed that way
+brew uninstall pyenv pyenv-virtualenv
+```
+
+### Why uv over pyenv?
+
+- **Faster**: Built in Rust, ~10-100x faster than pip
+- **Simpler**: One tool for versions + dependencies + execution
+- **Modern**: Native PEP 621 support (pyproject.toml)
+- **Reliable**: Lock files, reproducible builds
+- **All-in-one**: `uv run` handles Python version + virtualenv + execution

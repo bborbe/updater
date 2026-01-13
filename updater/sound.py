@@ -15,7 +15,7 @@ def play_sound(sound_file: str) -> None:
         - Fails silently if afplay is not available (non-macOS)
         - Plays sound in background (non-blocking)
     """
-    if sys.platform != 'darwin':
+    if sys.platform != "darwin":
         return  # Only works on macOS
 
     sound_path = Path(sound_file)
@@ -25,9 +25,9 @@ def play_sound(sound_file: str) -> None:
     try:
         # Play sound in background (non-blocking)
         subprocess.Popen(
-            ['afplay', str(sound_path)],
+            ["afplay", str(sound_path)],
             stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL
+            stderr=subprocess.DEVNULL,
         )
     except (FileNotFoundError, subprocess.SubprocessError):
         # afplay not available or failed - fail silently
@@ -36,14 +36,14 @@ def play_sound(sound_file: str) -> None:
 
 def play_interaction_sound() -> None:
     """Play sound when user interaction is needed."""
-    play_sound('/System/Library/Sounds/Ping.aiff')
+    play_sound("/System/Library/Sounds/Ping.aiff")
 
 
 def play_completion_sound() -> None:
     """Play sound when task completes."""
-    play_sound('/System/Library/Sounds/Glass.aiff')
+    play_sound("/System/Library/Sounds/Glass.aiff")
 
 
 def play_error_sound() -> None:
     """Play sound when an error occurs."""
-    play_sound('/System/Library/Sounds/Sosumi.aiff')
+    play_sound("/System/Library/Sounds/Sosumi.aiff")

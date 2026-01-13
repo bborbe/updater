@@ -23,9 +23,9 @@ def prompt_yes_no(message: str, default_yes: bool = True) -> bool:
     prompt = f"{message} [{'Y/n' if default_yes else 'y/N'}]: "
     response = input(prompt).strip().lower()
 
-    if response in ['n', 'no']:
+    if response in ["n", "no"]:
         return False
-    elif response in ['y', 'yes']:
+    elif response in ["y", "yes"]:
         return True
     else:
         # Empty or anything else = default
@@ -50,8 +50,8 @@ def prompt_skip_or_retry(message: str = "Skip or Retry?") -> str:
     prompt = f"{message} [s/R]: "
     response = input(prompt).strip().lower()
 
-    if response in ['s', 'skip']:
-        return 'skip'
+    if response in ["s", "skip"]:
+        return "skip"
     else:
         # Empty, 'r', 'retry', or anything else = retry (default)
-        return 'retry'
+        return "retry"

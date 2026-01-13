@@ -1,7 +1,6 @@
 """Tests for changelog operations."""
 
 import pytest
-from pathlib import Path
 from updater.changelog import extract_current_version, bump_version
 from updater.exceptions import ChangelogError
 

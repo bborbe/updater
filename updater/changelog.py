@@ -22,10 +22,10 @@ def extract_current_version(changelog_path: Path) -> Tuple[int, int, int]:
     if not changelog_path.exists():
         raise ChangelogError(f"CHANGELOG.md not found at {changelog_path}")
 
-    with open(changelog_path, 'r') as f:
+    with open(changelog_path, "r") as f:
         content = f.read()
 
-    version_match = re.search(r'##\s+v(\d+)\.(\d+)\.(\d+)', content)
+    version_match = re.search(r"##\s+v(\d+)\.(\d+)\.(\d+)", content)
     if not version_match:
         raise ChangelogError("Could not find version in CHANGELOG.md")
 
@@ -36,12 +36,7 @@ def extract_current_version(changelog_path: Path) -> Tuple[int, int, int]:
     return major, minor, patch
 
 
-def bump_version(
-    major: int,
-    minor: int,
-    patch: int,
-    bump_type: str
-) -> str:
+def bump_version(major: int, minor: int, patch: int, bump_type: str) -> str:
     """Calculate new version based on bump type.
 
     Args:
@@ -68,15 +63,15 @@ def bump_version(
     elif bump_type == "patch":
         patch += 1
     else:
-        raise ValueError(f"Invalid bump_type: {bump_type}. Must be major, minor, or patch")
+        raise ValueError(
+            f"Invalid bump_type: {bump_type}. Must be major, minor, or patch"
+        )
 
     return f"v{major}.{minor}.{patch}"
 
 
 def update_changelog_with_suggestions(
-    module_path: Path,
-    analysis: dict,
-    log_func
+    module_path: Path, analysis: dict, log_func
 ) -> Optional[str]:
     """Update CHANGELOG.md with suggested changes.
 
@@ -98,12 +93,14 @@ def update_changelog_with_suggestions(
     changelog_path = Path(module_path) / "CHANGELOG.md"
 
     if not changelog_path.exists():
-        log_func(f"⚠ No CHANGELOG.md found at {changelog_path}, skipping", to_console=True)
+        log_func(
+            f"⚠ No CHANGELOG.md found at {changelog_path}, skipping", to_console=True
+        )
         return None
 
     # Read current CHANGELOG
     log_func("→ Reading current CHANGELOG", to_console=config.VERBOSE_MODE)
-    with open(changelog_path, 'r') as f:
+    with open(changelog_path, "r") as f:
         content = f.read()
 
     # Extract current version
@@ -114,22 +111,26 @@ def update_changelog_with_suggestions(
     new_version = bump_version(major, minor, patch, analysis["version_bump"])
 
     log_func(f"  Current version: {old_version}", to_console=config.VERBOSE_MODE)
-    log_func(f"  Version bump: {analysis['version_bump']}", to_console=config.VERBOSE_MODE)
+    log_func(
+        f"  Version bump: {analysis['version_bump']}", to_console=config.VERBOSE_MODE
+    )
     log_func(f"  New version: {new_version}", to_console=config.VERBOSE_MODE)
 
     # Format changelog bullets
-    changelog_bullets = '\n'.join(f"- {bullet.lstrip('- ')}" for bullet in analysis["changelog"])
+    changelog_bullets = "\n".join(
+        f"- {bullet.lstrip('- ')}" for bullet in analysis["changelog"]
+    )
 
-    log_func(f"\n  Changelog entry:", to_console=config.VERBOSE_MODE)
+    log_func("\n  Changelog entry:", to_console=config.VERBOSE_MODE)
     for bullet in analysis["changelog"]:
         log_func(f"    - {bullet.lstrip('- ')}", to_console=config.VERBOSE_MODE)
 
     # Insert new version section
-    lines = content.split('\n')
+    lines = content.split("\n")
 
     insert_idx = 0
     for i, line in enumerate(lines):
-        if line.startswith('## v'):
+        if line.startswith("## v"):
             insert_idx = i
             break
 
@@ -137,8 +138,8 @@ def update_changelog_with_suggestions(
     lines.insert(insert_idx, new_entry)
 
     # Write back
-    with open(changelog_path, 'w') as f:
-        f.write('\n'.join(lines))
+    with open(changelog_path, "w") as f:
+        f.write("\n".join(lines))
 
     log_func(f"\n✓ CHANGELOG updated to {new_version}", to_console=True)
 

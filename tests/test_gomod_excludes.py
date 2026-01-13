@@ -1,7 +1,5 @@
 """Tests for go.mod excludes and replaces."""
 
-from pathlib import Path
-
 from updater.gomod_excludes import (
     apply_gomod_excludes_and_replaces,
     read_gomod_excludes_and_replaces,
@@ -148,7 +146,7 @@ def test_apply_excludes_to_empty_gomod(tmp_path, mocker):
     gomod.write_text("module example.com/test\n\ngo 1.23\n")
 
     # Mock run_command to avoid actual go mod edit calls
-    mock_run = mocker.patch('updater.gomod_excludes.run_command')
+    mock_run = mocker.patch("updater.gomod_excludes.run_command")
 
     result = apply_gomod_excludes_and_replaces(tmp_path)
 
@@ -211,7 +209,7 @@ replace k8s.io/kube-openapi => k8s.io/kube-openapi v0.0.0-20250701173324-9bd5c66
     gomod.write_text(content)
 
     # Mock run_command to avoid actual go mod edit calls
-    mock_run = mocker.patch('updater.gomod_excludes.run_command')
+    mock_run = mocker.patch("updater.gomod_excludes.run_command")
 
     result = apply_gomod_excludes_and_replaces(tmp_path)
 

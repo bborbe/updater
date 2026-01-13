@@ -1,7 +1,6 @@
 """Logging setup, management, and cleanup."""
 
 import subprocess
-import sys
 from pathlib import Path
 from typing import Callable, Optional
 
@@ -26,7 +25,7 @@ def setup_module_logging(module_path: Path) -> Optional[Path]:
 
     # Create log file with timestamp
     log_file = log_dir / f"{config.RUN_TIMESTAMP}.log"
-    config.LOG_FILE_HANDLE = open(log_file, 'w')
+    config.LOG_FILE_HANDLE = open(log_file, "w")
 
     # Write header
     config.LOG_FILE_HANDLE.write(f"Update Log - {config.RUN_TIMESTAMP}\n")
@@ -44,7 +43,7 @@ def close_module_logging() -> None:
         config.LOG_FILE_HANDLE = None
 
 
-def cleanup_old_logs(module_path: Path, keep_count: int = None) -> None:
+def cleanup_old_logs(module_path: Path, keep_count: Optional[int] = None) -> None:
     """Keep only the most recent N log files per module.
 
     Args:
@@ -60,7 +59,9 @@ def cleanup_old_logs(module_path: Path, keep_count: int = None) -> None:
         return
 
     # Get all log files sorted by modification time (newest first)
-    log_files = sorted(log_dir.glob("*.log"), key=lambda f: f.stat().st_mtime, reverse=True)
+    log_files = sorted(
+        log_dir.glob("*.log"), key=lambda f: f.stat().st_mtime, reverse=True
+    )
 
     # Remove old logs (keep only keep_count most recent)
     for old_log in log_files[keep_count:]:
@@ -87,7 +88,7 @@ def run_command(
     cwd: Optional[Path] = None,
     capture_output: bool = False,
     quiet: bool = False,
-    log_func: Callable = log_message
+    log_func: Callable = log_message,
 ) -> subprocess.CompletedProcess:
     """Execute shell command and return result.
 
@@ -111,7 +112,7 @@ def run_command(
         shell=True,
         cwd=cwd,
         capture_output=True,  # Always capture for logging
-        text=True
+        text=True,
     )
 
     # Log output
@@ -121,7 +122,9 @@ def run_command(
         log_func(result.stderr, to_console=config.VERBOSE_MODE and not quiet)
 
     if result.returncode != 0:
-        log_func(f"✗ Command failed with exit code {result.returncode}", to_console=True)
+        log_func(
+            f"✗ Command failed with exit code {result.returncode}", to_console=True
+        )
         if result.stdout:
             log_func(f"  stdout: {result.stdout}", to_console=True)
         if result.stderr:

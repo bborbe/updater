@@ -56,7 +56,9 @@ STANDARD_REPLACES = [
 ]
 
 
-def read_gomod_excludes_and_replaces(module_path: Path) -> tuple[set[str], dict[str, str]]:
+def read_gomod_excludes_and_replaces(
+    module_path: Path,
+) -> tuple[set[str], dict[str, str]]:
     """Read existing excludes and replaces from go.mod.
 
     Args:
@@ -72,7 +74,7 @@ def read_gomod_excludes_and_replaces(module_path: Path) -> tuple[set[str], dict[
         return set(), {}
 
     content = gomod.read_text()
-    lines = content.split('\n')
+    lines = content.split("\n")
 
     excludes = set()
     replaces = {}
@@ -84,13 +86,13 @@ def read_gomod_excludes_and_replaces(module_path: Path) -> tuple[set[str], dict[
         stripped = line.strip()
 
         # Track blocks
-        if stripped.startswith('exclude ('):
+        if stripped.startswith("exclude ("):
             in_exclude_block = True
             continue
-        elif stripped.startswith('replace ('):
+        elif stripped.startswith("replace ("):
             in_replace_block = True
             continue
-        elif stripped == ')':
+        elif stripped == ")":
             in_exclude_block = False
             in_replace_block = False
             continue
@@ -103,9 +105,9 @@ def read_gomod_excludes_and_replaces(module_path: Path) -> tuple[set[str], dict[
                 module = parts[0]
                 version = parts[1]
                 excludes.add(f"{module}@{version}")
-            elif '@' in stripped:
+            elif "@" in stripped:
                 excludes.add(stripped)
-        elif stripped.startswith('exclude '):
+        elif stripped.startswith("exclude "):
             # Single line exclude
             rest = stripped[8:].strip()  # Remove "exclude "
             parts = rest.split()
@@ -113,25 +115,29 @@ def read_gomod_excludes_and_replaces(module_path: Path) -> tuple[set[str], dict[
                 module = parts[0]
                 version = parts[1]
                 excludes.add(f"{module}@{version}")
-            elif '@' in rest:
+            elif "@" in rest:
                 excludes.add(rest)
 
         # Parse replace lines
         if in_replace_block:
             # Format: "old => new@version" or "old@version => new@version"
-            if '=>' in stripped:
-                parts = stripped.split('=>')
+            if "=>" in stripped:
+                parts = stripped.split("=>")
                 if len(parts) == 2:
-                    old = parts[0].strip().split()[0]  # Get just module name, ignore version
+                    old = (
+                        parts[0].strip().split()[0]
+                    )  # Get just module name, ignore version
                     new = parts[1].strip()
                     replaces[old] = new
-        elif stripped.startswith('replace '):
+        elif stripped.startswith("replace "):
             # Single line replace
             rest = stripped[8:].strip()  # Remove "replace "
-            if '=>' in rest:
-                parts = rest.split('=>')
+            if "=>" in rest:
+                parts = rest.split("=>")
                 if len(parts) == 2:
-                    old = parts[0].strip().split()[0]  # Get just module name, ignore version
+                    old = (
+                        parts[0].strip().split()[0]
+                    )  # Get just module name, ignore version
                     new = parts[1].strip()
                     replaces[old] = new
 
@@ -139,8 +145,7 @@ def read_gomod_excludes_and_replaces(module_path: Path) -> tuple[set[str], dict[
 
 
 def apply_gomod_excludes_and_replaces(
-    module_path: Path,
-    log_func: Callable = log_message
+    module_path: Path, log_func: Callable = log_message
 ) -> bool:
     """Apply standard excludes and replaces to go.mod if not already present.
 
@@ -166,10 +171,10 @@ def apply_gomod_excludes_and_replaces(
         if exclude not in existing_excludes:
             log_func(f"  → Adding exclude: {exclude}", to_console=True)
             run_command(
-                f'go mod edit -exclude {exclude}',
+                f"go mod edit -exclude {exclude}",
                 cwd=module_path,
                 quiet=True,
-                log_func=log_func
+                log_func=log_func,
             )
             changes_made = True
 
@@ -180,19 +185,25 @@ def apply_gomod_excludes_and_replaces(
             if existing_replaces[old_module] == new_module_stored:
                 continue  # Already correct
             # Different version, update it
-            log_func(f"  → Updating replace: {old_module} => {new_module_stored}", to_console=True)
+            log_func(
+                f"  → Updating replace: {old_module} => {new_module_stored}",
+                to_console=True,
+            )
         else:
-            log_func(f"  → Adding replace: {old_module} => {new_module_stored}", to_console=True)
+            log_func(
+                f"  → Adding replace: {old_module} => {new_module_stored}",
+                to_console=True,
+            )
 
         # Convert space to @ for go mod edit command
         # go.mod stores as "module version", but go mod edit needs "module@version"
-        new_module_cmd = new_module_stored.replace(' ', '@')
+        new_module_cmd = new_module_stored.replace(" ", "@")
 
         run_command(
-            f'go mod edit -replace {old_module}={new_module_cmd}',
+            f"go mod edit -replace {old_module}={new_module_cmd}",
             cwd=module_path,
             quiet=True,
-            log_func=log_func
+            log_func=log_func,
         )
         changes_made = True
 

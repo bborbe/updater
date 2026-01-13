@@ -1,7 +1,5 @@
 """Tests for utility functions."""
 
-from pathlib import Path
-
 from updater.git_operations import find_git_repo
 from updater.module_discovery import discover_go_modules
 
@@ -207,9 +205,9 @@ def test_discover_go_modules_recursive_complex_structure(tmp_path):
     # module-a/lib/* before module-a/*
     assert relative_paths[module_a_start] == "module-a/lib/client"
     assert relative_paths[module_a_start + 1] == "module-a/lib/types"
-    assert "module-a/service1" in relative_paths[module_a_start + 2:]
-    assert "module-a/service2" in relative_paths[module_a_start + 2:]
+    assert "module-a/service1" in relative_paths[module_a_start + 2 :]
+    assert "module-a/service2" in relative_paths[module_a_start + 2 :]
 
     # module-b/lib/* before module-b/*
     assert relative_paths[module_b_start] == "module-b/lib/template"
-    assert "module-b/sender" in relative_paths[module_b_start + 1:]
+    assert "module-b/sender" in relative_paths[module_b_start + 1 :]

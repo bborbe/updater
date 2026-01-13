@@ -1,9 +1,5 @@
 """Tests for version updater."""
 
-from pathlib import Path
-
-import pytest
-
 from updater.version_updater import (
     get_latest_alpine_version,
     get_latest_golang_version,
@@ -18,7 +14,7 @@ def test_get_latest_golang_version():
     """Test fetching latest golang version."""
     version = get_latest_golang_version()
     assert version is not None
-    assert len(version.split('.')) >= 2  # At least major.minor
+    assert len(version.split(".")) >= 2  # At least major.minor
     assert version[0].isdigit()
 
 
@@ -26,7 +22,7 @@ def test_get_latest_alpine_version():
     """Test fetching latest alpine version."""
     version = get_latest_alpine_version()
     assert version is not None
-    assert len(version.split('.')) == 2  # major.minor only
+    assert len(version.split(".")) == 2  # major.minor only
     assert version[0].isdigit()
 
 
@@ -115,25 +111,33 @@ def test_update_github_workflows_golang(tmp_path):
     ci_yml = workflows_dir / "ci.yml"
 
     # Test case 1: Single quotes
-    ci_yml.write_text("      - uses: actions/setup-go@v5\n        with:\n          go-version: '1.23.4'\n")
+    ci_yml.write_text(
+        "      - uses: actions/setup-go@v5\n        with:\n          go-version: '1.23.4'\n"
+    )
     assert update_github_workflows_golang(tmp_path, "1.25.5")
     content = ci_yml.read_text()
     assert "go-version: '1.25.5'" in content
 
     # Test case 2: Double quotes
-    ci_yml.write_text("      - uses: actions/setup-go@v5\n        with:\n          go-version: \"1.23.4\"\n")
+    ci_yml.write_text(
+        '      - uses: actions/setup-go@v5\n        with:\n          go-version: "1.23.4"\n'
+    )
     assert update_github_workflows_golang(tmp_path, "1.25.5")
     content = ci_yml.read_text()
     assert 'go-version: "1.25.5"' in content
 
     # Test case 3: No quotes
-    ci_yml.write_text("      - uses: actions/setup-go@v5\n        with:\n          go-version: 1.23.4\n")
+    ci_yml.write_text(
+        "      - uses: actions/setup-go@v5\n        with:\n          go-version: 1.23.4\n"
+    )
     assert update_github_workflows_golang(tmp_path, "1.25.5")
     content = ci_yml.read_text()
     assert "go-version: 1.25.5" in content
 
     # Test case 4: Already up to date
-    ci_yml.write_text("      - uses: actions/setup-go@v5\n        with:\n          go-version: '1.25.5'\n")
+    ci_yml.write_text(
+        "      - uses: actions/setup-go@v5\n        with:\n          go-version: '1.25.5'\n"
+    )
     assert not update_github_workflows_golang(tmp_path, "1.25.5")
 
 

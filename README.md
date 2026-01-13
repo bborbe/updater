@@ -89,10 +89,13 @@ Skip or Retry? [s/R]:
 
 ## Requirements
 
-- Python 3.12+
+- **[uv](https://docs.astral.sh/uv/)** - Python package manager (install: `curl -LsSf https://astral.sh/uv/install.sh | sh`)
+- Python 3.12+ (automatically managed by uv)
 - `ANTHROPIC_API_KEY` environment variable
 - Git repository
 - For Go modules: CHANGELOG.md in module/package
+
+**Note**: This project uses uv for dependency management. No need for pyenv, pip, or virtualenv.
 
 ## Documentation
 

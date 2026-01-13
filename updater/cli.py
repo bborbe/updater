@@ -2,7 +2,6 @@
 
 import argparse
 import asyncio
-import sys
 import traceback
 from datetime import datetime
 from pathlib import Path
@@ -52,7 +51,7 @@ async def process_single_module(module_path: Path) -> bool:
 
         log_message(f"\n{'=' * 70}", to_console=True)
         log_message(f"Module: {module_path.name}", to_console=True)
-        log_message('=' * 70, to_console=True)
+        log_message("=" * 70, to_console=True)
         if log_file and not config.VERBOSE_MODE:
             print(f"  Log: {log_file}")
 
@@ -69,8 +68,12 @@ async def process_single_module(module_path: Path) -> bool:
         version_updates = update_versions(module_path, log_func=log_message)
 
         # Phase 1b: Apply standard excludes and replaces
-        log_message("\n=== Phase 1b: Apply Standard Excludes/Replaces ===", to_console=True)
-        excludes_updates = apply_gomod_excludes_and_replaces(module_path, log_func=log_message)
+        log_message(
+            "\n=== Phase 1b: Apply Standard Excludes/Replaces ===", to_console=True
+        )
+        excludes_updates = apply_gomod_excludes_and_replaces(
+            module_path, log_func=log_message
+        )
 
         # Phase 1c: Update dependencies
         dep_updates = update_go_dependencies(module_path, log_func=log_message)
@@ -81,17 +84,27 @@ async def process_single_module(module_path: Path) -> bool:
         change_count, files = check_git_status(module_path)
 
         if change_count == 0 and not updates_made:
-            log_message("\n✓ No updates needed - module is already up to date", to_console=True)
+            log_message(
+                "\n✓ No updates needed - module is already up to date", to_console=True
+            )
             return True
 
         if change_count == 0:
-            log_message("\n✓ No changes detected after dependency update", to_console=True)
+            log_message(
+                "\n✓ No changes detected after dependency update", to_console=True
+            )
             return True
 
         if updates_made:
-            log_message(f"\n→ {change_count} file(s) changed after dependency update", to_console=True)
+            log_message(
+                f"\n→ {change_count} file(s) changed after dependency update",
+                to_console=True,
+            )
         else:
-            log_message(f"\n→ Processing {change_count} uncommitted file(s) from previous run", to_console=True)
+            log_message(
+                f"\n→ Processing {change_count} uncommitted file(s) from previous run",
+                to_console=True,
+            )
 
         # Show condensed file list if 20 or fewer lines
         condensed_files = condense_file_list(files)
@@ -105,10 +118,15 @@ async def process_single_module(module_path: Path) -> bool:
         # Phase 2b: Check if changes remain after precommit
         change_count, files = check_git_status(module_path)
         if change_count == 0:
-            log_message("\n✓ No changes remain after precommit (auto-formatted/fixed)", to_console=True)
+            log_message(
+                "\n✓ No changes remain after precommit (auto-formatted/fixed)",
+                to_console=True,
+            )
             return True
 
-        log_message(f"→ {change_count} file(s) changed after precommit", to_console=True)
+        log_message(
+            f"→ {change_count} file(s) changed after precommit", to_console=True
+        )
 
         # Show condensed file list if 20 or fewer lines
         condensed_files = condense_file_list(files)
@@ -120,28 +138,35 @@ async def process_single_module(module_path: Path) -> bool:
         analysis = await analyze_changes_with_claude(module_path, log_func=log_message)
 
         # Check if version bump is needed
-        if analysis['version_bump'] == 'none':
+        if analysis["version_bump"] == "none":
             # No version bump needed - just commit without CHANGELOG/tag
-            log_message("\n→ No version bump needed (infrastructure changes only)", to_console=True)
+            log_message(
+                "\n→ No version bump needed (infrastructure changes only)",
+                to_console=True,
+            )
 
             print("\n" + "=" * 60)
             print(f"READY TO COMMIT: {module_path.name}")
             print("=" * 60)
             print(f"Commit message: {analysis['commit_message']}")
             print("\nChanges:")
-            for bullet in analysis['changelog']:
+            for bullet in analysis["changelog"]:
                 print(f"  - {bullet.lstrip('- ')}")
             print("\nNote: No version bump or tag (infrastructure changes only)")
             print("=" * 60)
 
             # Ask for confirmation if required
             if config.REQUIRE_CONFIRM:
-                if not prompt_yes_no("\nProceed with commit (no tag)?", default_yes=True):
+                if not prompt_yes_no(
+                    "\nProceed with commit (no tag)?", default_yes=True
+                ):
                     log_message("\n⚠ Skipped by user", to_console=True)
-                    log_message("  Changes are staged but not committed", to_console=True)
+                    log_message(
+                        "  Changes are staged but not committed", to_console=True
+                    )
                     return True
 
-            git_commit(module_path, analysis['commit_message'], log_func=log_message)
+            git_commit(module_path, analysis["commit_message"], log_func=log_message)
             log_message("\n✓ Commit completed successfully (no tag)!", to_console=True)
             return True
 
@@ -150,31 +175,39 @@ async def process_single_module(module_path: Path) -> bool:
 
         if not changelog_path.exists():
             # No CHANGELOG.md - commit without tag
-            log_message("\n→ No CHANGELOG.md found, committing without tag", to_console=True)
+            log_message(
+                "\n→ No CHANGELOG.md found, committing without tag", to_console=True
+            )
 
             print("\n" + "=" * 60)
             print(f"READY TO COMMIT: {module_path.name}")
             print("=" * 60)
             print(f"Commit message: {analysis['commit_message']}")
             print("\nChanges:")
-            for bullet in analysis['changelog']:
+            for bullet in analysis["changelog"]:
                 print(f"  - {bullet.lstrip('- ')}")
             print("\nNote: No CHANGELOG.md found, no version tag will be created")
             print("=" * 60)
 
             # Ask for confirmation if required
             if config.REQUIRE_CONFIRM:
-                if not prompt_yes_no("\nProceed with commit (no tag)?", default_yes=True):
+                if not prompt_yes_no(
+                    "\nProceed with commit (no tag)?", default_yes=True
+                ):
                     log_message("\n⚠ Skipped by user", to_console=True)
-                    log_message("  Changes are staged but not committed", to_console=True)
+                    log_message(
+                        "  Changes are staged but not committed", to_console=True
+                    )
                     return True
 
-            git_commit(module_path, analysis['commit_message'], log_func=log_message)
+            git_commit(module_path, analysis["commit_message"], log_func=log_message)
             log_message("\n✓ Commit completed successfully (no tag)!", to_console=True)
             return True
 
         # CHANGELOG.md exists - update and create tag
-        new_version = update_changelog_with_suggestions(module_path, analysis, log_func=log_message)
+        new_version = update_changelog_with_suggestions(
+            module_path, analysis, log_func=log_message
+        )
 
         # Show summary and ask for confirmation (always to console)
         print("\n" + "=" * 60)
@@ -184,7 +217,7 @@ async def process_single_module(module_path: Path) -> bool:
         print(f"Commit message: {analysis['commit_message']}")
         print(f"Git tag:        {new_version} (will be created)")
         print("\nChangelog entries:")
-        for bullet in analysis['changelog']:
+        for bullet in analysis["changelog"]:
             print(f"  - {bullet.lstrip('- ')}")
         print("=" * 60)
 
@@ -195,7 +228,7 @@ async def process_single_module(module_path: Path) -> bool:
                 log_message("  Changes are staged but not committed", to_console=True)
                 return True
 
-        git_commit(module_path, analysis['commit_message'], log_func=log_message)
+        git_commit(module_path, analysis["commit_message"], log_func=log_message)
         git_tag_from_changelog(module_path, log_func=log_message)
         log_message("\n✓ Update completed successfully!", to_console=True)
         return True
@@ -230,7 +263,7 @@ async def process_module_with_retry(module_path: Path) -> tuple[bool, str]:
         success = await process_single_module(module_path)
 
         if success:
-            return True, 'success'
+            return True, "success"
 
         # Failed - prompt for skip or retry
         play_error_sound()
@@ -239,9 +272,9 @@ async def process_module_with_retry(module_path: Path) -> tuple[bool, str]:
 
         choice = prompt_skip_or_retry()
 
-        if choice == 'skip':
+        if choice == "skip":
             print(f"⚠ Skipping {module_path}\n")
-            return False, 'skipped'
+            return False, "skipped"
 
         # Retry - increment attempt counter
         attempt += 1
@@ -254,29 +287,29 @@ async def main_async() -> int:
         Exit code (0 for success, 1 for error)
     """
     parser = argparse.ArgumentParser(
-        description='Update Go module dependencies, CHANGELOG, and create git tags'
+        description="Update Go module dependencies, CHANGELOG, and create git tags"
     )
     parser.add_argument(
-        'modules',
-        nargs='*',
-        default=['.'],
-        help='Path(s) to Go module(s) or parent directories (default: current directory)'
+        "modules",
+        nargs="*",
+        default=["."],
+        help="Path(s) to Go module(s) or parent directories (default: current directory)",
     )
     parser.add_argument(
-        '--verbose',
-        action='store_true',
-        help='Show full command output (default: quiet with logs in .update-logs/)'
+        "--verbose",
+        action="store_true",
+        help="Show full command output (default: quiet with logs in .update-logs/)",
     )
     parser.add_argument(
-        '--model',
-        choices=['sonnet', 'opus', 'haiku'],
-        default='sonnet',
-        help='Claude model to use (default: sonnet)'
+        "--model",
+        choices=["sonnet", "opus", "haiku"],
+        default="sonnet",
+        help="Claude model to use (default: sonnet)",
     )
     parser.add_argument(
-        '--require-commit-confirm',
-        action='store_true',
-        help='Require user confirmation before committing (default: auto-commit)'
+        "--require-commit-confirm",
+        action="store_true",
+        help="Require user confirmation before committing (default: auto-commit)",
     )
 
     args = parser.parse_args()
@@ -312,7 +345,7 @@ async def main_async() -> int:
             modules.extend(discovered)
 
     if not modules:
-        print(f"✗ No Go modules found in provided path(s)")
+        print("✗ No Go modules found in provided path(s)")
         play_completion_sound()
         return 1
 
@@ -416,7 +449,7 @@ async def main_async() -> int:
         for i, mod in enumerate(modules, 1):
             print(f"\n{'#' * 70}")
             print(f"[{i}/{len(modules)}] Processing {mod.name}")
-            print('#' * 70)
+            print("#" * 70)
 
             success, status = await process_module_with_retry(mod)
             results.append((mod, success, status))
@@ -426,11 +459,13 @@ async def main_async() -> int:
         if len(module_paths) == 1:
             print(f"SUMMARY: {module_paths[0]}")
         else:
-            print(f"SUMMARY: {len(module_paths)} input path(s), {len(modules)} module(s)")
+            print(
+                f"SUMMARY: {len(module_paths)} input path(s), {len(modules)} module(s)"
+            )
         print("=" * 70)
 
-        successful = [mod for mod, _, status in results if status == 'success']
-        skipped = [mod for mod, _, status in results if status == 'skipped']
+        successful = [mod for mod, _, status in results if status == "success"]
+        skipped = [mod for mod, _, status in results if status == "skipped"]
 
         print(f"\n✓ Successful: {len(successful)}/{len(modules)}")
         for mod in successful:

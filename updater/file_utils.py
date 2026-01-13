@@ -10,8 +10,8 @@ def condense_file_list(files: list[str]) -> list[str]:
     Returns:
         Condensed list where vendor/* files are grouped as "vendor/** (N files)"
     """
-    vendor_files = [f for f in files if f.startswith('vendor/')]
-    non_vendor_files = [f for f in files if not f.startswith('vendor/')]
+    vendor_files = [f for f in files if f.startswith("vendor/")]
+    non_vendor_files = [f for f in files if not f.startswith("vendor/")]
 
     result = non_vendor_files.copy()
 

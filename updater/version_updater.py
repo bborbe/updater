@@ -29,7 +29,11 @@ def get_latest_golang_version() -> str | None:
             return version.removeprefix("go")
 
         return None
-    except Exception as e:
+    except httpx.HTTPError:
+        # Network error, timeout, or HTTP error - silently return None
+        return None
+    except (json.JSONDecodeError, KeyError, IndexError):
+        # Invalid response format - silently return None
         return None
 
 
@@ -42,7 +46,7 @@ def get_latest_alpine_version() -> str | None:
     try:
         response = httpx.get(
             "https://dl-cdn.alpinelinux.org/alpine/latest-stable/releases/x86_64/latest-releases.yaml",
-            timeout=10
+            timeout=10,
         )
         response.raise_for_status()
 
@@ -58,14 +62,16 @@ def get_latest_alpine_version() -> str | None:
                     return f"{parts[0]}.{parts[1]}"
 
         return None
-    except Exception as e:
+    except httpx.HTTPError:
+        # Network error, timeout, or HTTP error - silently return None
+        return None
+    except (yaml.YAMLError, KeyError, AttributeError):
+        # Invalid YAML or unexpected structure - silently return None
         return None
 
 
 def update_dockerfile_golang(
-    module_path: Path,
-    new_version: str,
-    log_func: Callable = log_message
+    module_path: Path, new_version: str, log_func: Callable = log_message
 ) -> bool:
     """Update golang version in Dockerfile.
 
@@ -86,12 +92,12 @@ def update_dockerfile_golang(
 
     # Pattern: FROM golang:1.23.4 or FROM golang:1.23.4-alpine3.20 or FROM golang:1.23.4 AS build
     # Replace with new version but keep any suffix and AS clause
-    pattern = r'FROM golang:(\d+\.\d+\.\d+)([-\w.]*)(\s+AS\s+\w+)?'
+    pattern = r"FROM golang:(\d+\.\d+\.\d+)([-\w.]*)(\s+AS\s+\w+)?"
 
     def replace_version(match):
-        suffix = match.group(2) if match.group(2) else ''
-        as_clause = match.group(3) if match.group(3) else ''
-        return f'FROM golang:{new_version}{suffix}{as_clause}'
+        suffix = match.group(2) if match.group(2) else ""
+        as_clause = match.group(3) if match.group(3) else ""
+        return f"FROM golang:{new_version}{suffix}{as_clause}"
 
     content = re.sub(pattern, replace_version, content)
 
@@ -104,9 +110,7 @@ def update_dockerfile_golang(
 
 
 def update_dockerfile_alpine(
-    module_path: Path,
-    new_version: str,
-    log_func: Callable = log_message
+    module_path: Path, new_version: str, log_func: Callable = log_message
 ) -> bool:
     """Update alpine version in Dockerfile.
 
@@ -126,11 +130,11 @@ def update_dockerfile_alpine(
     original_content = content
 
     # Pattern: FROM alpine:3.19 or FROM alpine:3.19.1 or FROM alpine:3.19 AS alpine
-    pattern = r'FROM alpine:(\d+\.\d+(?:\.\d+)?)(\s+AS\s+\w+)?'
+    pattern = r"FROM alpine:(\d+\.\d+(?:\.\d+)?)(\s+AS\s+\w+)?"
 
     def replace_version(match):
-        as_clause = match.group(2) if match.group(2) else ''
-        return f'FROM alpine:{new_version}{as_clause}'
+        as_clause = match.group(2) if match.group(2) else ""
+        return f"FROM alpine:{new_version}{as_clause}"
 
     content = re.sub(pattern, replace_version, content)
 
@@ -143,9 +147,7 @@ def update_dockerfile_alpine(
 
 
 def update_gomod_version(
-    module_path: Path,
-    new_version: str,
-    log_func: Callable = log_message
+    module_path: Path, new_version: str, log_func: Callable = log_message
 ) -> bool:
     """Update go version in go.mod.
 
@@ -162,12 +164,11 @@ def update_gomod_version(
         return False
 
     content = gomod.read_text()
-    original_content = content
 
     # Pattern: go 1.23 or go 1.23.4
-    pattern = r'^go (\d+\.\d+(?:\.\d+)?)$'
+    pattern = r"^go (\d+\.\d+(?:\.\d+)?)$"
 
-    lines = content.split('\n')
+    lines = content.split("\n")
     updated = False
 
     for i, line in enumerate(lines):
@@ -177,12 +178,12 @@ def update_gomod_version(
 
             # Compare versions - if different, update to new_version
             if current != new_version:
-                lines[i] = f'go {new_version}'
+                lines[i] = f"go {new_version}"
                 updated = True
                 break
 
     if updated:
-        content = '\n'.join(lines)
+        content = "\n".join(lines)
         gomod.write_text(content)
         log_func(f"  → Updated go.mod: go {new_version}", to_console=True)
         return True
@@ -191,9 +192,7 @@ def update_gomod_version(
 
 
 def update_github_workflows_golang(
-    module_path: Path,
-    new_version: str,
-    log_func: Callable = log_message
+    module_path: Path, new_version: str, log_func: Callable = log_message
 ) -> bool:
     """Update golang version in GitHub Actions workflows.
 
@@ -231,7 +230,10 @@ def update_github_workflows_golang(
 
         if content != original_content:
             workflow_file.write_text(content)
-            log_func(f"  → Updated {workflow_file.name}: go-version: {new_version}", to_console=True)
+            log_func(
+                f"  → Updated {workflow_file.name}: go-version: {new_version}",
+                to_console=True,
+            )
             any_updates = True
 
     return any_updates

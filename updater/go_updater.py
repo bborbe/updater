@@ -25,7 +25,10 @@ def update_go_dependencies(module_path: Path, log_func: Callable = log_message) 
 
     while iteration < max_iterations:
         iteration += 1
-        log_func(f"\n→ Iteration {iteration}/{max_iterations}", to_console=config.VERBOSE_MODE)
+        log_func(
+            f"\n→ Iteration {iteration}/{max_iterations}",
+            to_console=config.VERBOSE_MODE,
+        )
 
         # Check for available updates
         result = run_command(
@@ -33,16 +36,21 @@ def update_go_dependencies(module_path: Path, log_func: Callable = log_message) 
             cwd=module_path,
             capture_output=True,
             quiet=True,
-            log_func=log_func
+            log_func=log_func,
         )
 
-        outdated_modules = [line for line in result.stdout.strip().split('\n') if line]
+        outdated_modules = [line for line in result.stdout.strip().split("\n") if line]
 
         if not outdated_modules:
-            log_func("✓ All dependencies are up to date", to_console=config.VERBOSE_MODE)
+            log_func(
+                "✓ All dependencies are up to date", to_console=config.VERBOSE_MODE
+            )
             break
 
-        log_func(f"  Found {len(outdated_modules)} modules to update", to_console=config.VERBOSE_MODE)
+        log_func(
+            f"  Found {len(outdated_modules)} modules to update",
+            to_console=config.VERBOSE_MODE,
+        )
 
         # Update modules that have updates available
         updates_made = False
@@ -53,12 +61,17 @@ def update_go_dependencies(module_path: Path, log_func: Callable = log_message) 
                 cwd=module_path,
                 capture_output=True,
                 quiet=True,
-                log_func=log_func
+                log_func=log_func,
             )
 
-            if '[' in check_result.stdout:  # Has update available
+            if "[" in check_result.stdout:  # Has update available
                 log_func(f"  → Updating {module}", to_console=config.VERBOSE_MODE)
-                run_command(f"go get {module}@latest", cwd=module_path, quiet=True, log_func=log_func)
+                run_command(
+                    f"go get {module}@latest",
+                    cwd=module_path,
+                    quiet=True,
+                    log_func=log_func,
+                )
                 updates_made = True
                 any_updates_made = True
 

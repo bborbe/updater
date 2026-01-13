@@ -1,7 +1,5 @@
 """Tests for git operations."""
 
-import subprocess
-from pathlib import Path
 from unittest.mock import Mock, patch
 
 from updater.git_operations import check_git_status
@@ -9,8 +7,10 @@ from updater.git_operations import check_git_status
 
 def test_check_git_status_no_changes(tmp_path):
     """Test check_git_status with no changes."""
-    with patch('updater.git_operations.find_git_repo') as mock_find, \
-         patch('subprocess.run') as mock_run:
+    with (
+        patch("updater.git_operations.find_git_repo") as mock_find,
+        patch("subprocess.run") as mock_run,
+    ):
         mock_find.return_value = tmp_path
         mock_run.return_value = Mock(returncode=0, stdout="")
 
@@ -25,8 +25,10 @@ def test_check_git_status_with_changes(tmp_path):
     # Simulate git status --porcelain output
     git_output = " M go.mod\n M go.sum\n?? newfile.txt\n"
 
-    with patch('updater.git_operations.find_git_repo') as mock_find, \
-         patch('subprocess.run') as mock_run:
+    with (
+        patch("updater.git_operations.find_git_repo") as mock_find,
+        patch("subprocess.run") as mock_run,
+    ):
         mock_find.return_value = tmp_path
         mock_run.return_value = Mock(returncode=0, stdout=git_output)
 
@@ -40,8 +42,10 @@ def test_check_git_status_with_spaces_in_filename(tmp_path):
     """Test check_git_status with filenames containing spaces."""
     git_output = " M file with spaces.go\n"
 
-    with patch('updater.git_operations.find_git_repo') as mock_find, \
-         patch('subprocess.run') as mock_run:
+    with (
+        patch("updater.git_operations.find_git_repo") as mock_find,
+        patch("subprocess.run") as mock_run,
+    ):
         mock_find.return_value = tmp_path
         mock_run.return_value = Mock(returncode=0, stdout=git_output)
 
@@ -55,10 +59,14 @@ def test_check_git_status_with_spaces_in_filename(tmp_path):
 
 def test_check_git_status_error(tmp_path):
     """Test check_git_status with git command error."""
-    with patch('updater.git_operations.find_git_repo') as mock_find, \
-         patch('subprocess.run') as mock_run:
+    with (
+        patch("updater.git_operations.find_git_repo") as mock_find,
+        patch("subprocess.run") as mock_run,
+    ):
         mock_find.return_value = tmp_path
-        mock_run.return_value = Mock(returncode=1, stdout="", stderr="fatal: not a git repository")
+        mock_run.return_value = Mock(
+            returncode=1, stdout="", stderr="fatal: not a git repository"
+        )
 
         count, files = check_git_status(tmp_path)
 
@@ -68,7 +76,7 @@ def test_check_git_status_error(tmp_path):
 
 def test_check_git_status_no_git_repo(tmp_path):
     """Test check_git_status when not in a git repository."""
-    with patch('updater.git_operations.find_git_repo') as mock_find:
+    with patch("updater.git_operations.find_git_repo") as mock_find:
         mock_find.return_value = None
 
         count, files = check_git_status(tmp_path)
@@ -87,15 +95,24 @@ D  deleted.go
 ?? untracked.go
 """
 
-    with patch('updater.git_operations.find_git_repo') as mock_find, \
-         patch('subprocess.run') as mock_run:
+    with (
+        patch("updater.git_operations.find_git_repo") as mock_find,
+        patch("subprocess.run") as mock_run,
+    ):
         mock_find.return_value = tmp_path
         mock_run.return_value = Mock(returncode=0, stdout=git_output)
 
         count, files = check_git_status(tmp_path)
 
         assert count == 6
-        assert files == ["staged.go", "unstaged.go", "both.go", "added.go", "deleted.go", "untracked.go"]
+        assert files == [
+            "staged.go",
+            "unstaged.go",
+            "both.go",
+            "added.go",
+            "deleted.go",
+            "untracked.go",
+        ]
 
 
 def test_check_git_status_subdirectory_filters(tmp_path):
@@ -111,8 +128,10 @@ M  k8s/gcp-snapshot-schedule-manager/go.mod
 M  raw/schema-v1/pipe-controller/go.mod
 """
 
-    with patch('updater.git_operations.find_git_repo') as mock_find, \
-         patch('subprocess.run') as mock_run:
+    with (
+        patch("updater.git_operations.find_git_repo") as mock_find,
+        patch("subprocess.run") as mock_run,
+    ):
         mock_find.return_value = repo_root
         mock_run.return_value = Mock(returncode=0, stdout=git_output)
 
@@ -133,8 +152,10 @@ M  vendor/modules.txt
 M  skeleton/vendor/github.com/baz/file.go
 """
 
-    with patch('updater.git_operations.find_git_repo') as mock_find, \
-         patch('subprocess.run') as mock_run:
+    with (
+        patch("updater.git_operations.find_git_repo") as mock_find,
+        patch("subprocess.run") as mock_run,
+    ):
         mock_find.return_value = tmp_path
         mock_run.return_value = Mock(returncode=0, stdout=git_output)
 

@@ -1,6 +1,5 @@
 """Tests for .gitignore management."""
 
-from pathlib import Path
 from updater.git_operations import ensure_gitignore_entry
 
 
@@ -65,7 +64,7 @@ def test_ensure_gitignore_entry_handles_no_trailing_slash(tmp_path):
     ensure_gitignore_entry(tmp_path, log_func=mock_log_func)
 
     content = gitignore_path.read_text()
-    lines = content.strip().split('\n')
+    lines = content.strip().split("\n")
     # Should have 4 lines (/.update-logs recognized, /.claude, /CLAUDE.md, and /.mcp-* added)
     assert len(lines) == 4
 
@@ -78,7 +77,7 @@ def test_ensure_gitignore_entry_trailing_newline(tmp_path):
     content = gitignore_path.read_text()
 
     # Should end with newline
-    assert content.endswith('\n')
+    assert content.endswith("\n")
 
 
 def test_ensure_gitignore_entry_partial_existing(tmp_path):
