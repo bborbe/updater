@@ -31,6 +31,9 @@ update-deps = "updater.cli:main"
 [tool.uv]
 package = true
 
+[tool.hatch.build.targets.wheel]
+packages = ["src/updater"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]

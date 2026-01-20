@@ -9,17 +9,17 @@ Multi-language dependency updater with Claude-powered CHANGELOG generation and c
 From GitHub:
 ```bash
 # Single module
-uvx github.com/bborbe/updater update-deps /path/to/module
+uvx --from git+https://github.com/bborbe/updater update-deps /path/to/module
 
 # Multiple specific modules (explicit paths)
-uvx github.com/bborbe/updater update-deps /path/to/moduleA /path/to/moduleB /path/to/moduleC
+uvx --from git+https://github.com/bborbe/updater update-deps /path/to/moduleA /path/to/moduleB /path/to/moduleC
 
 # Parent directory (discovers all recursively, including nested)
-uvx github.com/bborbe/updater update-deps /path/to/modules
+uvx --from git+https://github.com/bborbe/updater update-deps /path/to/modules
 
 # Monorepo (discovers all nested modules with smart ordering)
 cd /path/to/monorepo
-uvx github.com/bborbe/updater update-deps .
+uvx --from git+https://github.com/bborbe/updater update-deps .
 ```
 
 Local development:
@@ -49,16 +49,16 @@ The tool follows this workflow:
 
 ```bash
 # Verbose mode (show all output in console)
-uvx github.com/bborbe/updater update-deps /path/to/module --verbose
+uvx --from git+https://github.com/bborbe/updater update-deps /path/to/module --verbose
 
 # Choose Claude model (default: sonnet)
-uvx github.com/bborbe/updater update-deps /path/to/module --model haiku
+uvx --from git+https://github.com/bborbe/updater update-deps /path/to/module --model haiku
 
 # Require confirmation before commits (default: auto-commit)
-uvx github.com/bborbe/updater update-deps /path/to/module --require-commit-confirm
+uvx --from git+https://github.com/bborbe/updater update-deps /path/to/module --require-commit-confirm
 
 # Multiple modules with options
-uvx github.com/bborbe/updater update-deps /path/to/module1 /path/to/module2 --verbose
+uvx --from git+https://github.com/bborbe/updater update-deps /path/to/module1 /path/to/module2 --verbose
 ```
 
 ### Retry/Skip on Failure
