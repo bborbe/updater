@@ -8,6 +8,11 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## v0.5.1
+- Add build-system configuration for uvx GitHub installation support
+- Fix hatchling package discovery with explicit src/updater path
+- Update README with correct uvx syntax (--from git+https://...)
+
 ## v0.5.0
 - Add comprehensive test suite (75 new tests covering CLI, Claude analyzer, Go updater, module discovery)
 - Restructure project to src/ layout for better packaging
