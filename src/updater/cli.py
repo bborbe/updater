@@ -8,7 +8,7 @@ from pathlib import Path
 
 from . import config
 from .changelog import update_changelog_with_suggestions
-from .claude_analyzer import analyze_changes_with_claude
+from .claude_analyzer import analyze_changes_with_claude, verify_claude_auth
 from .file_utils import condense_file_list
 from .git_operations import (
     check_git_status,
@@ -296,6 +296,15 @@ async def main_async() -> int:
     config.MODEL = args.model
     config.REQUIRE_CONFIRM = args.require_commit_confirm
     config.RUN_TIMESTAMP = datetime.now().strftime("%Y-%m-%d-%H%M%S")
+
+    # Step 0: Verify Claude authentication
+    print("=== Step 0: Verify Claude Authentication ===\n")
+    auth_ok, auth_error = await verify_claude_auth()
+    if not auth_ok:
+        print(f"✗ {auth_error}")
+        play_completion_sound()
+        return 1
+    print("✓ Claude authentication verified\n")
 
     # Step 1: Discover Go modules to update
     print("=== Step 1: Discover Go Modules ===\n")

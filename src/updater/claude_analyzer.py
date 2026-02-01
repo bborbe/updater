@@ -19,6 +19,63 @@ from .exceptions import ClaudeError
 from .log_manager import log_message
 
 
+def _get_clean_config_dir() -> Path:
+    """Get or create the clean config directory for Claude.
+
+    Returns:
+        Path to the clean config directory
+    """
+    clean_config_dir = Path.home() / ".claude-clean"
+    clean_config_dir.mkdir(exist_ok=True)
+
+    # Create minimal settings.json without hooks
+    settings_path = clean_config_dir / "settings.json"
+    if not settings_path.exists():
+        settings_path.write_text(json.dumps({"permissions": {"allowedCommands": []}}))
+
+    return clean_config_dir
+
+
+async def verify_claude_auth() -> tuple[bool, str]:
+    """Verify Claude authentication is working.
+
+    Returns:
+        Tuple of (success: bool, error_message: str)
+    """
+    clean_config_dir = _get_clean_config_dir()
+
+    env = os.environ.copy()
+    env["CLAUDE_CONFIG_DIR"] = str(clean_config_dir)
+
+    options = ClaudeCodeOptions(
+        model=config.MODEL,
+        env=env,
+    )
+
+    try:
+        async with ClaudeSDKClient(options=options) as client:
+            await client.query("Reply with exactly: ok")
+
+            async for message in client.receive_response():
+                if isinstance(message, AssistantMessage):
+                    for block in message.content:
+                        if isinstance(block, TextBlock):
+                            # Got a response, auth works
+                            return True, ""
+
+        return True, ""
+    except Exception as e:
+        error_str = str(e)
+        if "Invalid API key" in error_str or "login" in error_str.lower():
+            return False, (
+                "Claude authentication failed for clean config directory.\n\n"
+                "Fix with ONE of these options:\n"
+                f"  1. Login:   CLAUDE_CONFIG_DIR={clean_config_dir} claude login\n"
+                f"  2. Symlink: ln -sf ~/.claude/.credentials.json {clean_config_dir}/.credentials.json"
+            )
+        return False, f"Claude check failed: {error_str}"
+
+
 async def analyze_changes_with_claude(
     module_path: Path, log_func: Callable[..., None] = log_message
 ) -> dict[str, Any]:
@@ -124,16 +181,7 @@ Example 3 - ONLY infrastructure changes (no dependencies, no code):
     os.chdir(module_path)
 
     try:
-        # Use dedicated clean config directory to bypass hooks from ~/.claude/settings.json
-        clean_config_dir = Path.home() / ".claude-clean"
-        clean_config_dir.mkdir(exist_ok=True)
-
-        # Create minimal settings.json without hooks
-        settings_path = clean_config_dir / "settings.json"
-        if not settings_path.exists():
-            settings_path.write_text(json.dumps({"permissions": {"allowedCommands": []}}))
-
-        # Use clean config directory (requires one-time login)
+        clean_config_dir = _get_clean_config_dir()
         env = os.environ.copy()
         env["CLAUDE_CONFIG_DIR"] = str(clean_config_dir)
 

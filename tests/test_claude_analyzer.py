@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, Mock, patch
 import pytest
 
 from updater import config
-from updater.claude_analyzer import analyze_changes_with_claude
+from updater.claude_analyzer import analyze_changes_with_claude, verify_claude_auth
 from updater.exceptions import ClaudeError
 
 
@@ -350,3 +350,60 @@ class TestAnalyzeChangesWithClaude:
 
             # Verify sleep was called with correct delay
             mock_sleep.assert_called_once_with(0.5)
+
+
+class TestVerifyClaudeAuth:
+    """Tests for verify_claude_auth function."""
+
+    @pytest.mark.asyncio
+    async def test_successful_auth(self, reset_config):
+        """Test successful authentication."""
+        mock_client = create_mock_client("ok")
+
+        with patch("updater.claude_analyzer.ClaudeSDKClient", return_value=mock_client):
+            success, error = await verify_claude_auth()
+
+        assert success is True
+        assert error == ""
+
+    @pytest.mark.asyncio
+    async def test_invalid_api_key_error(self, reset_config):
+        """Test auth failure with invalid API key."""
+        mock_client = AsyncMock()
+        mock_client.__aenter__ = AsyncMock(side_effect=Exception("Invalid API key"))
+        mock_client.__aexit__ = AsyncMock()
+
+        with patch("updater.claude_analyzer.ClaudeSDKClient", return_value=mock_client):
+            success, error = await verify_claude_auth()
+
+        assert success is False
+        assert "Claude authentication failed" in error
+        assert "claude login" in error
+        assert ".credentials.json" in error
+
+    @pytest.mark.asyncio
+    async def test_login_required_error(self, reset_config):
+        """Test auth failure when login required."""
+        mock_client = AsyncMock()
+        mock_client.__aenter__ = AsyncMock(side_effect=Exception("Please run /login"))
+        mock_client.__aexit__ = AsyncMock()
+
+        with patch("updater.claude_analyzer.ClaudeSDKClient", return_value=mock_client):
+            success, error = await verify_claude_auth()
+
+        assert success is False
+        assert "Claude authentication failed" in error
+
+    @pytest.mark.asyncio
+    async def test_other_error(self, reset_config):
+        """Test other errors don't show login hint."""
+        mock_client = AsyncMock()
+        mock_client.__aenter__ = AsyncMock(side_effect=Exception("Network timeout"))
+        mock_client.__aexit__ = AsyncMock()
+
+        with patch("updater.claude_analyzer.ClaudeSDKClient", return_value=mock_client):
+            success, error = await verify_claude_auth()
+
+        assert success is False
+        assert "Claude check failed" in error
+        assert "Network timeout" in error
