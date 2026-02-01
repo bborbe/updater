@@ -3,6 +3,7 @@
 import asyncio
 import json
 import os
+import subprocess
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -17,6 +18,89 @@ from claude_code_sdk import (
 from . import config
 from .exceptions import ClaudeError
 from .log_manager import log_message
+
+# Limits to prevent buffer overflow in Claude SDK (1MB limit)
+MAX_DIFF_PER_FILE = 50_000  # 50KB per file
+MAX_TOTAL_DIFF = 200_000  # 200KB total
+
+
+def _run_git_command(args: list[str], cwd: Path) -> str:
+    """Run a git command and return output, empty string on error."""
+    try:
+        result = subprocess.run(
+            ["git"] + args,
+            cwd=cwd,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        return result.stdout.strip()
+    except (subprocess.TimeoutExpired, subprocess.SubprocessError):
+        return ""
+
+
+def _truncate_diff(diff: str, max_size: int, label: str = "") -> str:
+    """Truncate diff to max_size with indicator."""
+    if len(diff) <= max_size:
+        return diff
+    truncated = diff[:max_size]
+    # Try to end at a newline for cleaner output
+    last_newline = truncated.rfind("\n")
+    if last_newline > max_size * 0.8:
+        truncated = truncated[:last_newline]
+    suffix = f"\n... [truncated {label}, {len(diff) - len(truncated)} bytes omitted]"
+    return truncated + suffix
+
+
+def _get_diff_base(cwd: Path) -> str:
+    """Get the comparison base (latest tag or empty for uncommitted)."""
+    tag = _run_git_command(["describe", "--tags", "--abbrev=0"], cwd)
+    return tag if tag else ""
+
+
+def _collect_diffs(module_path: Path) -> dict[str, str]:
+    """Pre-collect and truncate all diffs for analysis."""
+    base = _get_diff_base(module_path)
+    base_args = [base] if base else []
+
+    diffs: dict[str, str] = {}
+    total_size = 0
+
+    # Dependency files to check
+    dep_files = ["go.mod", "go.sum", "package.json", "pyproject.toml", "Dockerfile"]
+
+    for dep_file in dep_files:
+        if (module_path / dep_file).exists() or dep_file in ["go.mod", "go.sum"]:
+            diff = _run_git_command(
+                ["diff", "--no-color"] + base_args + ["--", dep_file], module_path
+            )
+            if diff:
+                diff = _truncate_diff(diff, MAX_DIFF_PER_FILE, dep_file)
+                diffs[dep_file] = diff
+                total_size += len(diff)
+
+    # General code diff (excluding vendor/node_modules and large generated files)
+    remaining_budget = MAX_TOTAL_DIFF - total_size
+    if remaining_budget > 10000:  # Only if we have reasonable budget left
+        code_diff = _run_git_command(
+            ["diff", "--no-color"]
+            + base_args
+            + [
+                "--",
+                ".",
+                ":(exclude)node_modules/**",
+                ":(exclude)vendor/**",
+                ":(exclude)**/mocks/**",
+                ":(exclude)**/*_mock.go",
+                ":(exclude)**/*.gen.go",
+            ],
+            module_path,
+        )
+        if code_diff:
+            code_diff = _truncate_diff(code_diff, remaining_budget, "code changes")
+            diffs["code_changes"] = code_diff
+
+    return diffs
 
 
 def _get_clean_config_dir() -> Path:
@@ -94,91 +178,53 @@ async def analyze_changes_with_claude(
         ClaudeError: If Claude analysis fails
     """
     log_func("\n=== Phase 3: Analyze Changes with Claude ===", to_console=True)
+    log_func("→ Collecting diffs...", to_console=config.VERBOSE_MODE)
+
+    # Pre-collect diffs to avoid Claude SDK buffer overflow
+    diffs = _collect_diffs(module_path)
+    base = _get_diff_base(module_path)
+    base_info = f"Comparing against tag: {base}" if base else "Comparing uncommitted changes"
+
+    # Build diff section for prompt
+    diff_sections = []
+    for name, diff in diffs.items():
+        diff_sections.append(f"=== {name} ===\n{diff}")
+    all_diffs = "\n\n".join(diff_sections) if diff_sections else "(no changes detected)"
+
     log_func("→ Analyzing changes...", to_console=config.VERBOSE_MODE)
 
-    prompt = f"""Analyze the git changes in this module and determine the appropriate version bump.
+    prompt = f"""Analyze these git changes and determine the appropriate version bump.
 
-Current directory: {module_path}
+Module: {module_path.name}
+{base_info}
 
-Version Bump Decision Rules (check in this order):
+Version Bump Decision Rules:
 1. **DEPENDENCY CHANGES = AT LEAST PATCH**
    - If go.mod, go.sum, package.json, pyproject.toml, or Dockerfile have version updates → PATCH minimum
-   - Dependency updates affect the library's behavior and require a version bump
 
 2. **CODE CHANGES:**
-   - **MAJOR** ("major"): Breaking API changes that require users to modify their code
-   - **MINOR** ("minor"): New features or enhancements (backwards-compatible)
-   - **PATCH** ("patch"): Bug fixes or small improvements
+   - **MAJOR**: Breaking API changes
+   - **MINOR**: New features (backwards-compatible)
+   - **PATCH**: Bug fixes or small improvements
 
-3. **NONE** ("none"): ONLY when there are ZERO dependency updates AND ZERO code changes
-   - Examples: .gitignore, .github/workflows, README.md, CLAUDE.md, Makefile, docs/, CI configs
-   - If there are dependency updates AND infrastructure changes, use PATCH (not NONE)
+3. **NONE**: ONLY when there are ZERO dependency updates AND ZERO code changes
+   - Examples: .gitignore, README.md, Makefile, docs/
+
+Here are the diffs (truncated if large, generated files excluded):
+
+{all_diffs}
 
 Task:
-1. **Determine comparison base** (what to compare against):
-   Run: git describe --tags --abbrev=0
-   - If successful, use that tag as base: git diff <tag>
-   - If no tag exists, compare uncommitted changes: git diff
+1. Determine version bump based on the diffs above
+2. Create 2-5 concise changelog bullet points
+3. Suggest a brief commit message (max 50 chars)
 
-2. **FIRST: Check for dependency changes** (this is most important):
-   Use the comparison base from step 1:
-   - git diff --no-color <base> go.mod
-   - git diff --no-color <base> go.sum
-   - git diff --no-color <base> package.json (if exists)
-   - git diff --no-color <base> pyproject.toml (if exists)
-   - git diff --no-color <base> Dockerfile (if exists)
-
-3. Then check code changes (excluding vendor/node_modules):
-   git diff --no-color <base> -- . ':(exclude)node_modules/**' ':(exclude)vendor/**'
-
-4. Determine version bump:
-   - If ANY dependency file changed → minimum PATCH
-   - If no dependencies changed but code changed → MAJOR/MINOR/PATCH based on change type
-   - If ONLY infrastructure files changed → NONE
-
-5. Create 2-5 concise changelog bullet points:
-   - Focus on dependency updates (which packages/versions)
-   - Include runtime version updates (golang, python, node, alpine, etc.)
-   - Keep each bullet short and specific
-   - Format: "update X to Y" or "update X dependencies"
-
-6. Suggest a brief commit message (max 50 chars)
-
-Return ONLY this JSON format (no markdown, no code blocks, no explanations):
-
-Example 1 - Dependency updates (always at least PATCH):
+Return ONLY this JSON format (no markdown, no code blocks):
 {{
-  "version_bump": "patch",
-  "changelog": [
-    "update golang to 1.23.4",
-    "update github.com/foo/bar to v2.1.0"
-  ],
-  "commit_message": "update dependencies"
-}}
-
-Example 2 - Dependencies + infrastructure (still PATCH, not NONE):
-{{
-  "version_bump": "patch",
-  "changelog": [
-    "update lib-core to v0.6.4",
-    "update lib-bolt to v0.2.4",
-    "add .gitignore file"
-  ],
-  "commit_message": "update dependencies"
-}}
-
-Example 3 - ONLY infrastructure changes (no dependencies, no code):
-{{
-  "version_bump": "none",
-  "changelog": [
-    "add .gitignore file"
-  ],
-  "commit_message": "add .gitignore"
+  "version_bump": "patch|minor|major|none",
+  "changelog": ["bullet 1", "bullet 2"],
+  "commit_message": "short message"
 }}"""
-
-    # Change to module directory so Claude runs commands there
-    original_dir = os.getcwd()
-    os.chdir(module_path)
 
     try:
         clean_config_dir = _get_clean_config_dir()
@@ -232,8 +278,5 @@ Example 3 - ONLY infrastructure changes (no dependencies, no code):
             "commit_message": analysis.get("commit_message", "update dependencies"),
         }
     finally:
-        # Restore original directory
-        os.chdir(original_dir)
-
         # Small delay to allow cleanup between sessions
         await asyncio.sleep(config.CLAUDE_SESSION_DELAY)

@@ -8,6 +8,10 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## v0.5.3
+- Fix Claude SDK buffer overflow by pre-collecting and truncating diffs
+- Exclude generated files (mocks, *_mock.go, *.gen.go) from diff analysis
+
 ## v0.5.2
 - Add Claude auth verification before processing modules
 - Show helpful login hints when authentication fails
