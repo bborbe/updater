@@ -47,7 +47,7 @@ def get_latest_python_version() -> str | None:
         return None
     except httpx.HTTPError:
         return None
-    except (KeyError, ValueError):
+    except KeyError, ValueError:
         return None
 
 

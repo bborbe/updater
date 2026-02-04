@@ -7,7 +7,7 @@ name = "dependency-updater"
 version = "0.1.0"
 description = "Multi-language dependency updater with Claude-powered CHANGELOG and commit messages (Go, Python, Node, etc.)"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.14"
 license = { text = "BSD-2-Clause" }
 dependencies = [
     "claude-code-sdk>=0.0.25",
@@ -45,7 +45,7 @@ asyncio_mode = "auto"
 
 [tool.ruff]
 line-length = 100
-target-version = "py312"
+target-version = "py314"
 
 [tool.ruff.lint]
 select = [
@@ -62,7 +62,7 @@ ignore = [
 ]
 
 [tool.mypy]
-python_version = "3.12"
+python_version = "3.14"
 disallow_untyped_defs = true
 warn_return_any = false
 warn_unused_ignores = true

@@ -47,3 +47,5 @@ env/
 # Claude Code
 /.claude/
 /.mcp-*
+/.update-logs/
+/CLAUDE.md

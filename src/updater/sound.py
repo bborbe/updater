@@ -29,7 +29,7 @@ def play_sound(sound_file: str) -> None:
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
-    except (FileNotFoundError, subprocess.SubprocessError):
+    except FileNotFoundError, subprocess.SubprocessError:
         # afplay not available or failed - fail silently
         pass
 

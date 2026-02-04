@@ -8,6 +8,12 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## v0.6.1
+
+- Upgrade Python requirement from 3.12 to 3.14
+- Update dependencies: anyio, certifi, cryptography, jsonschema, librt, mcp, packaging, pathspec, pycparser, pyjwt, python-multipart, pyyaml, ruff, sse-starlette, starlette, uvicorn
+- Fix exception tuple syntax (remove parentheses) for Python 3.14 compatibility
+
 ## v0.6.0
 - Add Python project support with uv-based dependency updates
 - Add entry points: update-all (alias), update-go, update-python, update-docker

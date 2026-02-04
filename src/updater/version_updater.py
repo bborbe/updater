@@ -32,7 +32,7 @@ def get_latest_golang_version() -> str | None:
     except httpx.HTTPError:
         # Network error, timeout, or HTTP error - silently return None
         return None
-    except (json.JSONDecodeError, KeyError, IndexError):
+    except json.JSONDecodeError, KeyError, IndexError:
         # Invalid response format - silently return None
         return None
 
@@ -65,7 +65,7 @@ def get_latest_alpine_version() -> str | None:
     except httpx.HTTPError:
         # Network error, timeout, or HTTP error - silently return None
         return None
-    except (yaml.YAMLError, KeyError, AttributeError):
+    except yaml.YAMLError, KeyError, AttributeError:
         # Invalid YAML or unexpected structure - silently return None
         return None
 

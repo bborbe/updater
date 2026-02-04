@@ -35,7 +35,7 @@ def _run_git_command(args: list[str], cwd: Path) -> str:
             timeout=30,
         )
         return result.stdout.strip()
-    except (subprocess.TimeoutExpired, subprocess.SubprocessError):
+    except subprocess.TimeoutExpired, subprocess.SubprocessError:
         return ""
 
 
