@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from updater import config
-from updater.cli import main_async, process_module_with_retry, process_single_module
+from updater.cli import main_async, process_module_with_retry, process_single_go_module
 
 
 @pytest.fixture
@@ -31,22 +31,22 @@ def mock_module_path(tmp_path):
 
 
 class TestProcessSingleModule:
-    """Tests for process_single_module function."""
+    """Tests for process_single_go_module function."""
 
     @pytest.mark.asyncio
     async def test_no_git_repo(self, tmp_path, reset_config):
-        """Test process_single_module fails when no git repo found."""
+        """Test process_single_go_module fails when no git repo found."""
         module_path = tmp_path / "no-git"
         module_path.mkdir()
 
         with patch("updater.cli.find_git_repo", return_value=None):
-            result = await process_single_module(module_path)
+            result = await process_single_go_module(module_path)
 
         assert result is False
 
     @pytest.mark.asyncio
     async def test_no_updates_needed(self, mock_module_path, reset_config):
-        """Test process_single_module succeeds when no updates needed."""
+        """Test process_single_go_module succeeds when no updates needed."""
         with (
             patch("updater.cli.find_git_repo", return_value=mock_module_path),
             patch("updater.cli.setup_module_logging", return_value=None),
@@ -58,7 +58,7 @@ class TestProcessSingleModule:
             patch("updater.cli.close_module_logging"),
             patch("updater.cli.cleanup_old_logs"),
         ):
-            result = await process_single_module(mock_module_path)
+            result = await process_single_go_module(mock_module_path)
 
         assert result is True
 
@@ -76,7 +76,7 @@ class TestProcessSingleModule:
             patch("updater.cli.close_module_logging"),
             patch("updater.cli.cleanup_old_logs"),
         ):
-            result = await process_single_module(mock_module_path)
+            result = await process_single_go_module(mock_module_path)
 
         assert result is True
 
@@ -104,7 +104,7 @@ class TestProcessSingleModule:
                 "updater.cli.check_git_status",
                 side_effect=[(2, ["go.mod", "go.sum"]), (2, ["go.mod", "go.sum"])],
             ),
-            patch("updater.cli.run_precommit"),
+            patch("updater.cli.run_go_precommit"),
             patch(
                 "updater.cli.analyze_changes_with_claude",
                 new_callable=AsyncMock,
@@ -117,7 +117,7 @@ class TestProcessSingleModule:
             patch("updater.cli.cleanup_old_logs"),
             patch("builtins.print"),
         ):
-            result = await process_single_module(mock_module_path)
+            result = await process_single_go_module(mock_module_path)
 
         assert result is True
 
@@ -141,7 +141,7 @@ class TestProcessSingleModule:
                 "updater.cli.check_git_status",
                 side_effect=[(2, ["go.mod", "go.sum"]), (2, ["go.mod", "go.sum"])],
             ),
-            patch("updater.cli.run_precommit"),
+            patch("updater.cli.run_go_precommit"),
             patch(
                 "updater.cli.analyze_changes_with_claude",
                 new_callable=AsyncMock,
@@ -152,7 +152,7 @@ class TestProcessSingleModule:
             patch("updater.cli.cleanup_old_logs"),
             patch("builtins.print"),
         ):
-            result = await process_single_module(mock_module_path)
+            result = await process_single_go_module(mock_module_path)
 
         assert result is True
 
@@ -176,7 +176,7 @@ class TestProcessSingleModule:
                 "updater.cli.check_git_status",
                 side_effect=[(1, [".gitignore"]), (1, [".gitignore"])],
             ),
-            patch("updater.cli.run_precommit"),
+            patch("updater.cli.run_go_precommit"),
             patch(
                 "updater.cli.analyze_changes_with_claude",
                 new_callable=AsyncMock,
@@ -187,7 +187,7 @@ class TestProcessSingleModule:
             patch("updater.cli.cleanup_old_logs"),
             patch("builtins.print"),
         ):
-            result = await process_single_module(mock_module_path)
+            result = await process_single_go_module(mock_module_path)
 
         assert result is True
 
@@ -200,7 +200,7 @@ class TestProcessSingleModule:
             patch("updater.cli.close_module_logging"),
             patch("updater.cli.cleanup_old_logs"),
         ):
-            result = await process_single_module(mock_module_path)
+            result = await process_single_go_module(mock_module_path)
 
         assert result is False
 
@@ -228,7 +228,7 @@ class TestProcessSingleModule:
                 "updater.cli.check_git_status",
                 side_effect=[(2, ["go.mod", "go.sum"]), (2, ["go.mod", "go.sum"])],
             ),
-            patch("updater.cli.run_precommit"),
+            patch("updater.cli.run_go_precommit"),
             patch(
                 "updater.cli.analyze_changes_with_claude",
                 new_callable=AsyncMock,
@@ -242,7 +242,7 @@ class TestProcessSingleModule:
             patch("updater.cli.cleanup_old_logs"),
             patch("builtins.print"),
         ):
-            result = await process_single_module(mock_module_path)
+            result = await process_single_go_module(mock_module_path)
 
         assert result is True
 
@@ -270,7 +270,7 @@ class TestProcessSingleModule:
                 "updater.cli.check_git_status",
                 side_effect=[(2, ["go.mod", "go.sum"]), (2, ["go.mod", "go.sum"])],
             ),
-            patch("updater.cli.run_precommit"),
+            patch("updater.cli.run_go_precommit"),
             patch(
                 "updater.cli.analyze_changes_with_claude",
                 new_callable=AsyncMock,
@@ -282,7 +282,7 @@ class TestProcessSingleModule:
             patch("updater.cli.cleanup_old_logs"),
             patch("builtins.print"),
         ):
-            result = await process_single_module(mock_module_path)
+            result = await process_single_go_module(mock_module_path)
 
         # User rejected, but function returns True (changes staged but not committed)
         assert result is True
@@ -299,11 +299,11 @@ class TestProcessSingleModule:
             patch("updater.cli.update_go_dependencies", return_value=False),
             # First check shows changes, precommit runs, second check shows no changes
             patch("updater.cli.check_git_status", side_effect=[(2, ["go.mod", "go.sum"]), (0, [])]),
-            patch("updater.cli.run_precommit"),
+            patch("updater.cli.run_go_precommit"),
             patch("updater.cli.close_module_logging"),
             patch("updater.cli.cleanup_old_logs"),
         ):
-            result = await process_single_module(mock_module_path)
+            result = await process_single_go_module(mock_module_path)
 
         assert result is True
 
@@ -314,7 +314,9 @@ class TestProcessModuleWithRetry:
     @pytest.mark.asyncio
     async def test_success_first_try(self, mock_module_path):
         """Test successful processing on first attempt."""
-        with patch("updater.cli.process_single_module", new_callable=AsyncMock, return_value=True):
+        with patch(
+            "updater.cli.process_single_go_module", new_callable=AsyncMock, return_value=True
+        ):
             success, status = await process_module_with_retry(mock_module_path)
 
         assert success is True
@@ -325,7 +327,7 @@ class TestProcessModuleWithRetry:
         """Test retry after failure, then success."""
         with (
             patch(
-                "updater.cli.process_single_module",
+                "updater.cli.process_single_go_module",
                 new_callable=AsyncMock,
                 side_effect=[False, True],
             ),
@@ -342,7 +344,9 @@ class TestProcessModuleWithRetry:
     async def test_skip_after_failure(self, mock_module_path):
         """Test user chooses to skip after failure."""
         with (
-            patch("updater.cli.process_single_module", new_callable=AsyncMock, return_value=False),
+            patch(
+                "updater.cli.process_single_go_module", new_callable=AsyncMock, return_value=False
+            ),
             patch("updater.cli.prompt_skip_or_retry", return_value="skip"),
             patch("updater.cli.play_error_sound"),
             patch("builtins.print"),
@@ -357,7 +361,7 @@ class TestProcessModuleWithRetry:
         """Test multiple retry attempts before success."""
         with (
             patch(
-                "updater.cli.process_single_module",
+                "updater.cli.process_single_go_module",
                 new_callable=AsyncMock,
                 side_effect=[False, False, True],
             ),

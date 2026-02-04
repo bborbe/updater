@@ -8,6 +8,16 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## v0.6.0
+- Add Python project support with uv-based dependency updates
+- Add entry points: update-all (alias), update-go, update-python, update-docker
+- Add Python version updates (.python-version, pyproject.toml, Dockerfile)
+- Add Dockerfile base image updater (standalone mode)
+- Add legacy Python project detection with migration warning
+- Add ensure_changelog_tag for automatic tag creation from CHANGELOG
+- Refactor commit summary to helper function
+- Add log_func parameter to update_git_branch for consistency
+
 ## v0.5.3
 - Fix Claude SDK buffer overflow by pre-collecting and truncating diffs
 - Exclude generated files (mocks, *_mock.go, *.gen.go) from diff analysis

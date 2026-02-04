@@ -27,6 +27,10 @@ dev = [
 
 [project.scripts]
 update-deps = "updater.cli:main"
+update-all = "updater.cli:main"
+update-go = "updater.cli:main_go"
+update-python = "updater.cli:main_python"
+update-docker = "updater.cli:main_docker"
 
 [tool.uv]
 package = true

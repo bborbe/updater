@@ -2,14 +2,19 @@
 
 Multi-language dependency updater with Claude-powered CHANGELOG generation and commit messages.
 
-**Supported Languages:** Go (implemented) | Python/Node.js (planned)
+**Supported Languages:** Go, Python | Node.js (planned)
 
 ## Installation
 
 From GitHub:
 ```bash
-# Single module
+# Auto-detect language (Go or Python)
 uvx --from git+https://github.com/bborbe/updater update-deps /path/to/module
+
+# Language-specific commands
+uvx --from git+https://github.com/bborbe/updater update-go /path/to/go-module
+uvx --from git+https://github.com/bborbe/updater update-python /path/to/python-project
+uvx --from git+https://github.com/bborbe/updater update-docker /path/to/project  # Dockerfile only
 
 # Multiple specific modules (explicit paths)
 uvx --from git+https://github.com/bborbe/updater update-deps /path/to/moduleA /path/to/moduleB /path/to/moduleC
@@ -38,12 +43,24 @@ uvx --reinstall --from /path/to/updater update-deps ~/workspace/raw ~/workspace/
 
 The tool follows this workflow:
 
+**Go modules:**
 1. **Update versions** - golang, alpine (Dockerfile, go.mod, CI configs)
 2. **Apply excludes/replaces** - Standard go.mod exclusions for problematic versions
-3. **Update dependencies** - Language-specific (Go: iterative go get)
-4. **Run validation** - make precommit (tests, linters, formatting)
+3. **Update dependencies** - Iterative `go get -u`
+4. **Run validation** - `make precommit` (tests, linters, formatting)
 5. **Analyze changes** - Claude determines version bump and generates CHANGELOG entries
 6. **Commit & tag** - Git commit with Claude-generated message, git tag from CHANGELOG
+
+**Python projects** (requires `pyproject.toml` + `uv.lock`):
+1. **Update Python version** - `.python-version`, `pyproject.toml`, Dockerfile
+2. **Update dependencies** - `uv sync --upgrade`
+3. **Run validation** - `make precommit`
+4. **Analyze changes** - Claude determines version bump and generates CHANGELOG entries
+5. **Commit & tag** - Git commit with Claude-generated message, git tag from CHANGELOG
+
+**Dockerfile only** (`update-docker`):
+1. **Update base images** - python, golang, alpine versions in Dockerfile
+2. No commit (changes only)
 
 ### Options
 
@@ -75,17 +92,28 @@ Skip or Retry? [s/R]:
 - **Retry (R)**: Fix the issue, press R to retry from Phase 1
 - **Skip (s)**: Skip this module and continue to next
 
+## Entry Points
+
+| Command | Description |
+|---------|-------------|
+| `update-deps` / `update-all` | Auto-detect Go/Python and update |
+| `update-go` | Go modules only |
+| `update-python` | Python projects only (requires `pyproject.toml` + `uv.lock`) |
+| `update-docker` | Dockerfile base images only (no commit) |
+
 ## Features
 
 - **Claude-powered CHANGELOG** - Analyzes changes and generates meaningful entries
 - **Smart version bumping** - MAJOR/MINOR/PATCH for code/deps, NONE for infrastructure
+- **Multi-language support** - Go modules and Python projects (uv-based)
 - **Monorepo support** - Recursive discovery with smart lib/-first ordering
 - **Idempotent** - Skips modules already up-to-date
-- **Version updates** - golang, alpine (Dockerfile, go.mod, CI)
+- **Version updates** - golang, alpine, python (Dockerfile, go.mod, pyproject.toml, CI)
 - **Standard excludes** - Applies go.mod excludes/replaces for problematic versions
 - **Clean output** - Quiet mode with per-module logs (`.update-logs/`)
 - **Retry/skip workflow** - Fix issues and retry, or skip failed modules
 - **Auto-gitignore** - Adds temporary files to each module's .gitignore
+- **Legacy project detection** - Warns about `requirements.txt` projects (migrate to uv first)
 
 ## Requirements
 
@@ -94,6 +122,7 @@ Skip or Retry? [s/R]:
 - `ANTHROPIC_API_KEY` environment variable
 - Git repository
 - For Go modules: CHANGELOG.md in module/package
+- For Python projects: `pyproject.toml` + `uv.lock` (legacy `requirements.txt` not supported)
 
 **Note**: This project uses uv for dependency management. No need for pyenv, pip, or virtualenv.
 

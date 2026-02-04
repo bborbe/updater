@@ -144,15 +144,23 @@ def check_git_status(path: Path) -> tuple[int, list[str]]:
     return len(files), files
 
 
-def update_git_branch(repo_path: Path) -> bool:
+def update_git_branch(repo_path: Path, log_func: Callable[..., None] | None = None) -> bool:
     """Switch to master branch and pull latest changes.
 
     Args:
         repo_path: Path to git repository
+        log_func: Optional logging function (defaults to print)
 
     Returns:
         True on success, False on failure
     """
+
+    def log(msg: str) -> None:
+        if log_func:
+            log_func(msg, to_console=True)
+        else:
+            print(msg)
+
     # Get current branch
     result = subprocess.run(
         "git branch --show-current",
@@ -163,14 +171,14 @@ def update_git_branch(repo_path: Path) -> bool:
     )
 
     if result.returncode != 0:
-        print(f"  ✗ Failed to get current branch: {result.stderr}")
+        log(f"  ✗ Failed to get current branch: {result.stderr}")
         return False
 
     current_branch = result.stdout.strip()
 
     # Switch to master if not already there
     if current_branch != "master":
-        print(f"  → Switching from {current_branch} to master")
+        log(f"  → Switching from {current_branch} to master")
         result = subprocess.run(
             "git checkout master",
             shell=True,
@@ -179,17 +187,17 @@ def update_git_branch(repo_path: Path) -> bool:
             text=True,
         )
         if result.returncode != 0:
-            print(f"  ✗ Failed to checkout master: {result.stderr}")
+            log(f"  ✗ Failed to checkout master: {result.stderr}")
             return False
 
     # Pull latest changes
     result = subprocess.run("git pull", shell=True, cwd=repo_path, capture_output=True, text=True)
 
     if result.returncode != 0:
-        print(f"  ✗ Failed to pull: {result.stderr}")
+        log(f"  ✗ Failed to pull: {result.stderr}")
         return False
 
-    print("  ✓ Updated to latest master")
+    log("  ✓ Updated to latest master")
     return True
 
 
@@ -216,6 +224,67 @@ def git_commit(module_path: Path, message: str, log_func: Callable[..., None]) -
     run_command(f'git commit -m "{message}"', cwd=module_path, quiet=True, log_func=log_func)
 
     log_func("✓ Git commit completed", to_console=True)
+
+
+def ensure_changelog_tag(module_path: Path, log_func: Callable[..., None]) -> bool:
+    """Ensure the latest CHANGELOG version has a corresponding git tag.
+
+    If CHANGELOG.md has a version (e.g., v0.1.0) but no git tag exists for it,
+    creates the tag. This handles the case where a CHANGELOG is added with an
+    initial version.
+
+    Args:
+        module_path: Path to module
+        log_func: Logging function to use
+
+    Returns:
+        True if a tag was created, False otherwise
+    """
+    import re
+
+    from . import config
+    from .log_manager import run_command
+
+    changelog_path = Path(module_path) / "CHANGELOG.md"
+
+    if not changelog_path.exists():
+        return False
+
+    # Extract version from CHANGELOG
+    with open(changelog_path) as f:
+        content = f.read()
+
+    version_match = re.search(r"##\s+(v\d+\.\d+\.\d+)", content)
+    if not version_match:
+        return False
+
+    tag = version_match.group(1)
+
+    # Check if tag already exists
+    check_tag = subprocess.run(
+        f"git tag -l {tag}",
+        shell=True,
+        cwd=module_path,
+        capture_output=True,
+        text=True,
+    )
+
+    if check_tag.stdout.strip() == tag:
+        # Tag already exists
+        log_func(f"  ✓ Tag {tag} already exists", to_console=config.VERBOSE_MODE)
+        return False
+
+    # Create the tag
+    log_func("\n=== Create Missing Tag ===", to_console=True)
+    log_func(f"→ Creating tag: {tag}", to_console=True)
+    run_command(
+        f'git tag -a {tag} -m "add version {tag}"',
+        cwd=module_path,
+        quiet=True,
+        log_func=log_func,
+    )
+    log_func(f"✓ Tagged with: {tag}", to_console=True)
+    return True
 
 
 def git_tag_from_changelog(module_path: Path, log_func: Callable[..., None]) -> None:

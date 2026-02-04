@@ -1,4 +1,4 @@
-"""Go module discovery and sorting."""
+"""Module discovery for Go and Python projects."""
 
 from pathlib import Path
 
@@ -93,3 +93,139 @@ def discover_go_modules(parent_path: Path, recursive: bool = False) -> list[Path
         modules.sort()
 
     return modules
+
+
+def discover_python_modules(parent_path: Path, recursive: bool = False) -> list[Path]:
+    """Discover Python modules (directories with pyproject.toml + uv.lock).
+
+    Only modern uv-based projects are supported. Legacy projects with only
+    requirements.txt are skipped (use is_legacy_python_project to detect them).
+
+    Args:
+        parent_path: Parent directory to search in
+        recursive: If True, search recursively in all subdirectories
+
+    Returns:
+        List of paths to Python modules, sorted alphabetically
+    """
+    modules = []
+    parent = Path(parent_path)
+
+    if recursive:
+        # Recursive search - find all pyproject.toml files
+        for item in parent.rglob("pyproject.toml"):
+            if item.is_file():
+                module_dir = item.parent
+                # Skip .venv directories
+                if ".venv" in module_dir.parts:
+                    continue
+                # Require uv.lock for modern project detection
+                if (module_dir / "uv.lock").exists():
+                    modules.append(module_dir)
+    else:
+        # Non-recursive - only direct children
+        for item in sorted(parent.iterdir()):
+            if item.is_dir():
+                if (item / "pyproject.toml").exists() and (item / "uv.lock").exists():
+                    modules.append(item)
+
+    # Sort alphabetically
+    modules.sort()
+
+    return modules
+
+
+def is_legacy_python_project(path: Path) -> bool:
+    """Check if a directory is a legacy Python project.
+
+    Legacy projects have:
+    - requirements.txt without uv.lock, OR
+    - setup.py without pyproject.toml
+
+    Modern projects (pyproject.toml + uv.lock) are NOT legacy.
+    Non-Python projects (Go, etc.) are NOT legacy.
+
+    Args:
+        path: Directory to check
+
+    Returns:
+        True if legacy Python project, False otherwise
+    """
+    path = Path(path)
+
+    has_requirements = (path / "requirements.txt").exists()
+    has_setup_py = (path / "setup.py").exists()
+    has_pyproject = (path / "pyproject.toml").exists()
+    has_uv_lock = (path / "uv.lock").exists()
+
+    # Modern uv project - not legacy
+    if has_pyproject and has_uv_lock:
+        return False
+
+    # Has requirements.txt without modern setup
+    if has_requirements and not has_uv_lock:
+        return True
+
+    # Has setup.py without pyproject.toml
+    if has_setup_py and not has_pyproject:
+        return True
+
+    return False
+
+
+def discover_legacy_python_projects(parent_path: Path, recursive: bool = False) -> list[Path]:
+    """Discover legacy Python projects (requirements.txt without uv.lock).
+
+    Args:
+        parent_path: Parent directory to search in
+        recursive: If True, search recursively in all subdirectories
+
+    Returns:
+        List of paths to legacy Python projects
+    """
+    projects = []
+    parent = Path(parent_path)
+
+    if recursive:
+        # Find requirements.txt files
+        for item in parent.rglob("requirements.txt"):
+            if item.is_file():
+                project_dir = item.parent
+                # Skip .venv directories
+                if ".venv" in project_dir.parts:
+                    continue
+                if is_legacy_python_project(project_dir):
+                    projects.append(project_dir)
+
+        # Also find setup.py without pyproject.toml
+        for item in parent.rglob("setup.py"):
+            if item.is_file():
+                project_dir = item.parent
+                if ".venv" in project_dir.parts:
+                    continue
+                if is_legacy_python_project(project_dir) and project_dir not in projects:
+                    projects.append(project_dir)
+    else:
+        for item in sorted(parent.iterdir()):
+            if item.is_dir() and is_legacy_python_project(item):
+                projects.append(item)
+
+    projects.sort()
+    return projects
+
+
+def discover_all_modules(parent_path: Path, recursive: bool = False) -> dict[str, list[Path]]:
+    """Discover all modules (Go and Python) in a directory.
+
+    Args:
+        parent_path: Parent directory to search in
+        recursive: If True, search recursively in all subdirectories
+
+    Returns:
+        Dictionary with keys 'go', 'python', 'legacy' mapping to lists of paths
+    """
+    return {
+        "go": discover_go_modules(parent_path, recursive=recursive),
+        "python": discover_python_modules(parent_path, recursive=recursive),
+        "legacy": discover_legacy_python_projects(parent_path, recursive=recursive),
+    }
