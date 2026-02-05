@@ -29,6 +29,8 @@ dev = [
 update-deps = "updater.cli:main"
 update-all = "updater.cli:main"
 update-go = "updater.cli:main_go"
+update-go-only = "updater.cli:main_go_only"
+update-go-with-deps = "updater.cli:main_go_with_deps"
 update-python = "updater.cli:main_python"
 update-docker = "updater.cli:main_docker"
 

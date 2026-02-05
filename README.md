@@ -13,6 +13,8 @@ uvx --from git+https://github.com/bborbe/updater update-deps /path/to/module
 
 # Language-specific commands
 uvx --from git+https://github.com/bborbe/updater update-go /path/to/go-module
+uvx --from git+https://github.com/bborbe/updater update-go-only /path/to/go-module  # Version only, no deps
+uvx --from git+https://github.com/bborbe/updater update-go-with-deps /path/to/go-module  # Version + deps
 uvx --from git+https://github.com/bborbe/updater update-python /path/to/python-project
 uvx --from git+https://github.com/bborbe/updater update-docker /path/to/project  # Dockerfile only
 
@@ -97,7 +99,9 @@ Skip or Retry? [s/R]:
 | Command | Description |
 |---------|-------------|
 | `update-deps` / `update-all` | Auto-detect Go/Python and update |
-| `update-go` | Go modules only |
+| `update-go` | Go modules with dependencies (same as `update-go-with-deps`) |
+| `update-go-only` | Go version updates only (no dependency updates) |
+| `update-go-with-deps` | Go versions and dependencies (explicit name) |
 | `update-python` | Python projects only (requires `pyproject.toml` + `uv.lock`) |
 | `update-docker` | Dockerfile base images only (no commit) |
 

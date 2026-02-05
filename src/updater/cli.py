@@ -75,13 +75,14 @@ def print_commit_summary(
     print("=" * 60)
 
 
-async def process_single_go_module(module_path: Path) -> bool:
+async def process_single_go_module(module_path: Path, update_deps: bool = True) -> bool:
     """Process a single Go module.
 
     Creates a new Claude session for analyzing changes to ensure clean, isolated analysis.
 
     Args:
         module_path: Path to the module
+        update_deps: Whether to update dependencies (default: True)
 
     Returns:
         True if successful, False on error
@@ -113,8 +114,13 @@ async def process_single_go_module(module_path: Path) -> bool:
         log_message("\n=== Phase 1b: Apply Standard Excludes/Replaces ===", to_console=True)
         excludes_updates = apply_gomod_excludes_and_replaces(module_path, log_func=log_message)
 
-        # Phase 1c: Update dependencies
-        dep_updates = update_go_dependencies(module_path, log_func=log_message)
+        # Phase 1c: Update dependencies (optional)
+        dep_updates = False
+        if update_deps:
+            dep_updates = update_go_dependencies(module_path, log_func=log_message)
+        else:
+            log_message("\n=== Phase 1c: Skip Dependency Updates ===", to_console=True)
+            log_message("  → Updating Go version only (no dependency changes)", to_console=True)
 
         updates_made = version_updates or excludes_updates or dep_updates
 
@@ -411,13 +417,14 @@ async def process_single_python_module(module_path: Path) -> bool:
 
 
 async def process_module_with_retry(
-    module_path: Path, project_type: str = "go"
+    module_path: Path, project_type: str = "go", update_deps: bool = True
 ) -> tuple[bool, str]:
     """Process a single module with retry on failure.
 
     Args:
         module_path: Path to the module
         project_type: Type of project ("go" or "python")
+        update_deps: Whether to update dependencies for Go modules (default: True)
 
     Returns:
         Tuple of (success: bool, status: str)
@@ -432,7 +439,7 @@ async def process_module_with_retry(
         if project_type == "python":
             success = await process_single_python_module(module_path)
         else:
-            success = await process_single_go_module(module_path)
+            success = await process_single_go_module(module_path, update_deps=update_deps)
 
         if success:
             return True, "success"
@@ -761,8 +768,154 @@ async def main_go_async() -> int:
 
 
 def main_go() -> int:
-    """Go-only entry point."""
+    """Go-only entry point (includes dependency updates)."""
     return asyncio.run(main_go_async())
+
+
+async def main_go_only_async() -> int:
+    """Go version-only async workflow (no dependency updates)."""
+    parser = argparse.ArgumentParser(description="Update Go versions only (no dependency updates)")
+    parser.add_argument(
+        "modules",
+        nargs="*",
+        default=["."],
+        help="Path(s) to Go module(s) or parent directories (default: current directory)",
+    )
+    parser.add_argument("--verbose", action="store_true", help="Show full command output")
+    parser.add_argument(
+        "--model",
+        choices=["sonnet", "opus", "haiku"],
+        default="sonnet",
+        help="Claude model to use (default: sonnet)",
+    )
+    parser.add_argument(
+        "--require-commit-confirm",
+        action="store_true",
+        help="Require user confirmation before committing",
+    )
+
+    args = parser.parse_args()
+    config.VERBOSE_MODE = args.verbose
+    config.MODEL = args.model
+    config.REQUIRE_CONFIRM = args.require_commit_confirm
+    config.RUN_TIMESTAMP = datetime.now().strftime("%Y-%m-%d-%H%M%S")
+
+    # Discover Go modules only
+    print("=== Discover Go Modules ===\n")
+
+    module_paths = []
+    for path_str in args.modules:
+        path = Path(path_str).resolve()
+        if not path.exists():
+            print(f"✗ Path does not exist: {path}")
+            return 1
+        module_paths.append(path)
+
+    modules = []
+    for module_path in module_paths:
+        if (module_path / "go.mod").exists():
+            modules.append(module_path)
+        else:
+            discovered = discover_go_modules(module_path, recursive=True)
+            modules.extend(discovered)
+
+    if not modules:
+        print("✗ No Go modules found")
+        return 1
+
+    # Remove duplicates
+    modules = list(dict.fromkeys(modules))
+
+    print(f"Found {len(modules)} Go module(s)\n")
+
+    # Process each module (version updates only)
+    for i, mod in enumerate(modules, 1):
+        if len(modules) > 1:
+            print(f"\n[{i}/{len(modules)}] {mod.name}")
+        success, _ = await process_module_with_retry(mod, project_type="go", update_deps=False)
+        if not success:
+            return 1
+
+    play_completion_sound()
+    return 0
+
+
+def main_go_only() -> int:
+    """Go version-only entry point (no dependency updates)."""
+    return asyncio.run(main_go_only_async())
+
+
+async def main_go_with_deps_async() -> int:
+    """Go with dependencies async workflow (explicit name for clarity)."""
+    parser = argparse.ArgumentParser(description="Update Go versions and dependencies")
+    parser.add_argument(
+        "modules",
+        nargs="*",
+        default=["."],
+        help="Path(s) to Go module(s) or parent directories (default: current directory)",
+    )
+    parser.add_argument("--verbose", action="store_true", help="Show full command output")
+    parser.add_argument(
+        "--model",
+        choices=["sonnet", "opus", "haiku"],
+        default="sonnet",
+        help="Claude model to use (default: sonnet)",
+    )
+    parser.add_argument(
+        "--require-commit-confirm",
+        action="store_true",
+        help="Require user confirmation before committing",
+    )
+
+    args = parser.parse_args()
+    config.VERBOSE_MODE = args.verbose
+    config.MODEL = args.model
+    config.REQUIRE_CONFIRM = args.require_commit_confirm
+    config.RUN_TIMESTAMP = datetime.now().strftime("%Y-%m-%d-%H%M%S")
+
+    # Discover Go modules only
+    print("=== Discover Go Modules ===\n")
+
+    module_paths = []
+    for path_str in args.modules:
+        path = Path(path_str).resolve()
+        if not path.exists():
+            print(f"✗ Path does not exist: {path}")
+            return 1
+        module_paths.append(path)
+
+    modules = []
+    for module_path in module_paths:
+        if (module_path / "go.mod").exists():
+            modules.append(module_path)
+        else:
+            discovered = discover_go_modules(module_path, recursive=True)
+            modules.extend(discovered)
+
+    if not modules:
+        print("✗ No Go modules found")
+        return 1
+
+    # Remove duplicates
+    modules = list(dict.fromkeys(modules))
+
+    print(f"Found {len(modules)} Go module(s)\n")
+
+    # Process each module (with dependencies)
+    for i, mod in enumerate(modules, 1):
+        if len(modules) > 1:
+            print(f"\n[{i}/{len(modules)}] {mod.name}")
+        success, _ = await process_module_with_retry(mod, project_type="go", update_deps=True)
+        if not success:
+            return 1
+
+    play_completion_sound()
+    return 0
+
+
+def main_go_with_deps() -> int:
+    """Go with dependencies entry point."""
+    return asyncio.run(main_go_with_deps_async())
 
 
 async def main_python_async() -> int:

@@ -8,6 +8,12 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## v0.7.0
+- Add update-go-only command for Go version updates without dependency changes
+- Add update-go-with-deps command (explicit name for version + dependencies)
+- Add update_deps parameter to process_single_go_module() for conditional dependency updates
+- Update README documentation with new entry points
+
 ## v0.6.1
 
 - Upgrade Python requirement from 3.12 to 3.14
