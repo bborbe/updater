@@ -103,16 +103,20 @@ def _collect_diffs(module_path: Path) -> dict[str, str]:
     return diffs
 
 
-def _get_clean_config_dir() -> Path:
-    """Get or create the clean config directory for Claude.
+def _get_clean_config_dir() -> Path | None:
+    """Get the clean config directory for Claude if it exists.
+
+    Only uses ~/.claude-clean if it was explicitly created by the user.
+    Falls back to default Claude config otherwise.
 
     Returns:
-        Path to the clean config directory
+        Path to the clean config directory, or None to use default
     """
     clean_config_dir = Path.home() / ".claude-clean"
-    clean_config_dir.mkdir(exist_ok=True)
+    if not clean_config_dir.exists():
+        return None
 
-    # Create minimal settings.json without hooks
+    # Ensure minimal settings.json without hooks
     settings_path = clean_config_dir / "settings.json"
     if not settings_path.exists():
         settings_path.write_text(json.dumps({"permissions": {"allowedCommands": []}}))
@@ -123,41 +127,66 @@ def _get_clean_config_dir() -> Path:
 async def verify_claude_auth() -> tuple[bool, str]:
     """Verify Claude authentication is working.
 
+    Retries up to 3 times on timeout errors with exponential backoff.
+
     Returns:
         Tuple of (success: bool, error_message: str)
     """
     clean_config_dir = _get_clean_config_dir()
 
     env = os.environ.copy()
-    env["CLAUDE_CONFIG_DIR"] = str(clean_config_dir)
+    if clean_config_dir is not None:
+        env["CLAUDE_CONFIG_DIR"] = str(clean_config_dir)
 
     options = ClaudeCodeOptions(
         model=config.MODEL,
         env=env,
     )
 
-    try:
-        async with ClaudeSDKClient(options=options) as client:
-            await client.query("Reply with exactly: ok")
+    # Retry logic for timeout errors
+    max_retries = 3
+    retry_delays = [2, 5, 10]  # seconds - exponential backoff
 
-            async for message in client.receive_response():
-                if isinstance(message, AssistantMessage):
-                    for block in message.content:
-                        if isinstance(block, TextBlock):
-                            # Got a response, auth works
-                            return True, ""
+    for attempt in range(max_retries):
+        try:
+            async with ClaudeSDKClient(options=options) as client:
+                await client.query("Reply with exactly: ok")
 
-        return True, ""
-    except Exception as e:
-        error_str = str(e)
-        if "Invalid API key" in error_str or "login" in error_str.lower():
-            return False, (
-                "Claude authentication failed for clean config directory.\n\n"
-                "Fix with ONE of these options:\n"
-                f"  1. Login:   CLAUDE_CONFIG_DIR={clean_config_dir} claude login\n"
-                f"  2. Symlink: ln -sf ~/.claude/.credentials.json {clean_config_dir}/.credentials.json"
+                async for message in client.receive_response():
+                    if isinstance(message, AssistantMessage):
+                        for block in message.content:
+                            if isinstance(block, TextBlock):
+                                # Got a response, auth works
+                                return True, ""
+
+            return True, ""
+        except Exception as e:
+            error_str = str(e)
+
+            # Check for auth errors (non-retryable)
+            if "Invalid API key" in error_str or "login" in error_str.lower():
+                config_info = str(clean_config_dir) if clean_config_dir else "~/.claude"
+                return False, (
+                    f"Claude authentication failed for config directory: {config_info}\n\n"
+                    "Fix: Run 'claude login' to authenticate."
+                )
+
+            # Check if it's a timeout or connection error worth retrying
+            is_retryable = any(
+                keyword in error_str.lower()
+                for keyword in ["timeout", "control request", "connection", "initialize"]
             )
-        return False, f"Claude check failed: {error_str}"
+
+            if is_retryable and attempt < max_retries - 1:
+                delay = retry_delays[attempt]
+                # Note: No logging here since this is called during startup
+                await asyncio.sleep(delay)
+                continue
+            else:
+                # Non-retryable error or final attempt
+                return False, f"Claude check failed after {attempt + 1} attempts: {error_str}"
+
+    return False, "Claude check failed after all retries"
 
 
 async def analyze_changes_with_claude(
@@ -166,6 +195,7 @@ async def analyze_changes_with_claude(
     """Ask Claude to analyze changes and suggest version bump + changelog bullets.
 
     Creates a new Claude session for each module to ensure clean analysis.
+    Retries up to 3 times on timeout errors with exponential backoff.
 
     Args:
         module_path: Path to the module
@@ -175,7 +205,7 @@ async def analyze_changes_with_claude(
         Dict with keys: version_bump, changelog, commit_message
 
     Raises:
-        ClaudeError: If Claude analysis fails
+        ClaudeError: If Claude analysis fails after all retries
     """
     log_func("\n=== Phase 3: Analyze Changes with Claude ===", to_console=True)
     log_func("→ Collecting diffs...", to_console=config.VERBOSE_MODE)
@@ -226,57 +256,90 @@ Return ONLY this JSON format (no markdown, no code blocks):
   "commit_message": "short message"
 }}"""
 
-    try:
-        clean_config_dir = _get_clean_config_dir()
-        env = os.environ.copy()
-        env["CLAUDE_CONFIG_DIR"] = str(clean_config_dir)
+    # Retry logic for timeout errors
+    max_retries = 3
+    retry_delays = [2, 5, 10]  # seconds - exponential backoff
 
-        options = ClaudeCodeOptions(
-            model=config.MODEL,
-            env=env,
-        )
-
-        response_text = ""
-
-        # Create new client for clean session per module
-        async with ClaudeSDKClient(options=options) as client:
-            await client.query(prompt)
-
-            async for message in client.receive_response():
-                if isinstance(message, AssistantMessage):
-                    for block in message.content:
-                        if isinstance(block, TextBlock):
-                            response_text += block.text
-
-        # Parse JSON response
-        # Extract JSON from response (handle markdown code blocks and plain text)
-        if "```json" in response_text:
-            start = response_text.find("```json") + 7
-            end = response_text.find("```", start)
-            response_text = response_text[start:end].strip()
-        elif "```" in response_text:
-            start = response_text.find("```") + 3
-            end = response_text.find("```", start)
-            response_text = response_text[start:end].strip()
-        else:
-            # No code blocks - find JSON by braces
-            start = response_text.find("{")
-            end = response_text.rfind("}") + 1
-            if start != -1 and end > start:
-                response_text = response_text[start:end].strip()
-
+    last_error = None
+    for attempt in range(max_retries):
         try:
-            analysis = json.loads(response_text)
-        except json.JSONDecodeError as e:
-            raise ClaudeError(
-                f"Failed to parse Claude response as JSON: {e}\nResponse: {response_text}"
-            ) from e
+            clean_config_dir = _get_clean_config_dir()
+            env = os.environ.copy()
+            if clean_config_dir is not None:
+                env["CLAUDE_CONFIG_DIR"] = str(clean_config_dir)
 
-        return {
-            "version_bump": analysis.get("version_bump", "patch"),
-            "changelog": analysis.get("changelog", ["go mod update"]),
-            "commit_message": analysis.get("commit_message", "update dependencies"),
-        }
-    finally:
-        # Small delay to allow cleanup between sessions
-        await asyncio.sleep(config.CLAUDE_SESSION_DELAY)
+            options = ClaudeCodeOptions(
+                model=config.MODEL,
+                env=env,
+            )
+
+            response_text = ""
+
+            # Create new client for clean session per module
+            async with ClaudeSDKClient(options=options) as client:
+                await client.query(prompt)
+
+                async for message in client.receive_response():
+                    if isinstance(message, AssistantMessage):
+                        for block in message.content:
+                            if isinstance(block, TextBlock):
+                                response_text += block.text
+
+            # Parse JSON response
+            # Extract JSON from response (handle markdown code blocks and plain text)
+            if "```json" in response_text:
+                start = response_text.find("```json") + 7
+                end = response_text.find("```", start)
+                response_text = response_text[start:end].strip()
+            elif "```" in response_text:
+                start = response_text.find("```") + 3
+                end = response_text.find("```", start)
+                response_text = response_text[start:end].strip()
+            else:
+                # No code blocks - find JSON by braces
+                start = response_text.find("{")
+                end = response_text.rfind("}") + 1
+                if start != -1 and end > start:
+                    response_text = response_text[start:end].strip()
+
+            try:
+                analysis = json.loads(response_text)
+            except json.JSONDecodeError as e:
+                raise ClaudeError(
+                    f"Failed to parse Claude response as JSON: {e}\nResponse: {response_text}"
+                ) from e
+
+            return {
+                "version_bump": analysis.get("version_bump", "patch"),
+                "changelog": analysis.get("changelog", ["go mod update"]),
+                "commit_message": analysis.get("commit_message", "update dependencies"),
+            }
+
+        except Exception as e:
+            error_str = str(e).lower()
+            # Check if it's a timeout or connection error worth retrying
+            is_retryable = any(
+                keyword in error_str
+                for keyword in ["timeout", "control request", "connection", "initialize"]
+            )
+
+            if is_retryable and attempt < max_retries - 1:
+                delay = retry_delays[attempt]
+                log_func(
+                    f"→ Timeout error (attempt {attempt + 1}/{max_retries}), "
+                    f"retrying in {delay}s...",
+                    to_console=True,
+                )
+                await asyncio.sleep(delay)
+                last_error = e
+                continue
+            else:
+                # Non-retryable error or final attempt - raise
+                raise ClaudeError(f"Claude analysis failed: {e}") from e
+
+        finally:
+            # Small delay to allow cleanup between sessions
+            await asyncio.sleep(config.CLAUDE_SESSION_DELAY)
+
+    # Should never reach here, but just in case
+    raise ClaudeError(f"Claude analysis failed after {max_retries} attempts") from last_error

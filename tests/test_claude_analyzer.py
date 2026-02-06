@@ -302,8 +302,10 @@ class TestAnalyzeChangesWithClaude:
             assert call_args[1]["options"].model == "haiku"
 
     @pytest.mark.asyncio
-    async def test_clean_config_dir_created(self, mock_module_path, reset_config, tmp_path):
-        """Test that clean config directory is created."""
+    async def test_clean_config_dir_not_created_if_missing(
+        self, mock_module_path, reset_config, tmp_path
+    ):
+        """Test that .claude-clean is NOT created when it doesn't exist."""
         mock_response = {
             "version_bump": "patch",
             "changelog": ["update deps"],
@@ -323,10 +325,43 @@ class TestAnalyzeChangesWithClaude:
         ):
             await analyze_changes_with_claude(mock_module_path)
 
-            # Check that .claude-clean directory was created
+            # .claude-clean should NOT be created automatically
             clean_dir = fake_home / ".claude-clean"
-            assert clean_dir.exists()
+            assert not clean_dir.exists()
+
+    @pytest.mark.asyncio
+    async def test_clean_config_dir_used_if_exists(self, mock_module_path, reset_config, tmp_path):
+        """Test that .claude-clean is used when it already exists."""
+        mock_response = {
+            "version_bump": "patch",
+            "changelog": ["update deps"],
+            "commit_message": "update deps",
+        }
+
+        mock_client = create_mock_client(json.dumps(mock_response))
+
+        # Use tmp_path as home directory for testing
+        fake_home = tmp_path / "home"
+        fake_home.mkdir()
+
+        # Pre-create .claude-clean directory
+        clean_dir = fake_home / ".claude-clean"
+        clean_dir.mkdir()
+
+        with (
+            patch("updater.claude_analyzer.ClaudeSDKClient", return_value=mock_client) as mock_sdk,
+            patch("updater.claude_analyzer.Path.home", return_value=fake_home),
+            patch("asyncio.sleep", new_callable=AsyncMock),
+        ):
+            await analyze_changes_with_claude(mock_module_path)
+
+            # settings.json should be created inside existing .claude-clean
             assert (clean_dir / "settings.json").exists()
+
+            # CLAUDE_CONFIG_DIR should be set in env
+            call_args = mock_sdk.call_args
+            env = call_args[1]["options"].env
+            assert env.get("CLAUDE_CONFIG_DIR") == str(clean_dir)
 
     @pytest.mark.asyncio
     async def test_session_delay_applied(self, mock_module_path, reset_config):
@@ -379,7 +414,6 @@ class TestVerifyClaudeAuth:
         assert success is False
         assert "Claude authentication failed" in error
         assert "claude login" in error
-        assert ".credentials.json" in error
 
     @pytest.mark.asyncio
     async def test_login_required_error(self, reset_config):

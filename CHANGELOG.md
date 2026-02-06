@@ -8,6 +8,11 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## v0.7.1
+- Make ~/.claude-clean config optional (only use if pre-created by user)
+- Add retry with exponential backoff for Claude SDK timeout errors
+- Add pytest-timeout (30s default) to prevent hanging tests
+
 ## v0.7.0
 - Add update-go-only command for Go version updates without dependency changes
 - Add update-go-with-deps command (explicit name for version + dependencies)
