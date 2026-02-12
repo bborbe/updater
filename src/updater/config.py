@@ -12,6 +12,7 @@ RUN_TIMESTAMP: str | None = None
 LOG_FILE_HANDLE: TextIO | None = None
 MODEL: str | None = None  # Claude model to use (sonnet, opus, haiku)
 REQUIRE_CONFIRM = False  # Require user confirmation before commits
+NO_TAG = False  # Add to Unreleased instead of creating version/tag
 
 # Go updater configuration
 GO_MAX_ITERATIONS = 10

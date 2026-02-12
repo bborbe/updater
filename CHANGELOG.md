@@ -8,6 +8,10 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## v0.11.0
+- Change git update behavior to stay on current branch and merge origin/master (instead of forcing checkout master)
+- Add --no-tag flag to add changes to ## Unreleased instead of creating version/tag (useful for PR workflows)
+
 ## v0.10.0
 - Add --skip-git-update flag to skip git branch checkout and pull (useful for worktree conflicts)
 - Fix Python syntax error in exception handling (old Python 2 syntax)

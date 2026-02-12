@@ -145,7 +145,10 @@ def check_git_status(path: Path) -> tuple[int, list[str]]:
 
 
 def update_git_branch(repo_path: Path, log_func: Callable[..., None] | None = None) -> bool:
-    """Switch to master branch and pull latest changes.
+    """Update current branch by fetching, pulling, and merging origin/master.
+
+    Stays on current branch and ensures it's up to date with both its remote
+    tracking branch and origin/master.
 
     Args:
         repo_path: Path to git repository
@@ -175,29 +178,45 @@ def update_git_branch(repo_path: Path, log_func: Callable[..., None] | None = No
         return False
 
     current_branch = result.stdout.strip()
+    log(f"  → On branch: {current_branch}")
 
-    # Switch to master if not already there
-    if current_branch != "master":
-        log(f"  → Switching from {current_branch} to master")
-        result = subprocess.run(
-            "git checkout master",
-            shell=True,
-            cwd=repo_path,
-            capture_output=True,
-            text=True,
-        )
-        if result.returncode != 0:
-            log(f"  ✗ Failed to checkout master: {result.stderr}")
-            return False
+    # Fetch all refs from origin
+    log("  → Fetching from origin")
+    result = subprocess.run(
+        "git fetch origin",
+        shell=True,
+        cwd=repo_path,
+        capture_output=True,
+        text=True,
+    )
 
-    # Pull latest changes
+    if result.returncode != 0:
+        log(f"  ✗ Failed to fetch: {result.stderr}")
+        return False
+
+    # Pull current branch (update from remote tracking branch)
+    log(f"  → Pulling {current_branch}")
     result = subprocess.run("git pull", shell=True, cwd=repo_path, capture_output=True, text=True)
 
     if result.returncode != 0:
         log(f"  ✗ Failed to pull: {result.stderr}")
         return False
 
-    log("  ✓ Updated to latest master")
+    # Merge origin/master into current branch
+    log("  → Merging origin/master")
+    result = subprocess.run(
+        "git merge origin/master",
+        shell=True,
+        cwd=repo_path,
+        capture_output=True,
+        text=True,
+    )
+
+    if result.returncode != 0:
+        log(f"  ✗ Failed to merge origin/master: {result.stderr}")
+        return False
+
+    log(f"  ✓ Updated {current_branch} with origin/master")
     return True
 
 

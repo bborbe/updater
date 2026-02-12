@@ -69,6 +69,89 @@ def bump_version(major: int, minor: int, patch: int, bump_type: str) -> str:
     return f"v{major}.{minor}.{patch}"
 
 
+def add_to_unreleased(
+    module_path: Path, analysis: dict[str, Any], log_func: Callable[..., None]
+) -> None:
+    """Add changes to ## Unreleased section (for --no-tag mode).
+
+    Args:
+        module_path: Path to module
+        analysis: Dict with keys: changelog
+        log_func: Logging function to use
+
+    Raises:
+        ChangelogError: If CHANGELOG operations fail
+    """
+    from . import config
+
+    log_func("\n=== Phase 4: Update CHANGELOG (Unreleased) ===", to_console=True)
+
+    changelog_path = Path(module_path) / "CHANGELOG.md"
+
+    if not changelog_path.exists():
+        log_func(f"⚠ No CHANGELOG.md found at {changelog_path}, skipping", to_console=True)
+        return
+
+    # Read current CHANGELOG
+    log_func("→ Reading current CHANGELOG", to_console=config.VERBOSE_MODE)
+    with open(changelog_path) as f:
+        content = f.read()
+
+    # Format changelog bullets
+    changelog_bullets = "\n".join(f"- {bullet.lstrip('- ')}" for bullet in analysis["changelog"])
+
+    log_func("\n  Adding to Unreleased:", to_console=config.VERBOSE_MODE)
+    for bullet in analysis["changelog"]:
+        log_func(f"    - {bullet.lstrip('- ')}", to_console=config.VERBOSE_MODE)
+
+    lines = content.split("\n")
+
+    # Find or create ## Unreleased section
+    unreleased_idx = None
+    first_version_idx = None
+
+    for i, line in enumerate(lines):
+        if line.strip() == "## Unreleased":
+            unreleased_idx = i
+            break
+        if line.startswith("## v") and first_version_idx is None:
+            first_version_idx = i
+
+    if unreleased_idx is not None:
+        # Unreleased section exists - append to it
+        # Find the end of existing entries (next ## section or empty line)
+        insert_idx = unreleased_idx + 1
+        # Skip blank lines after ## Unreleased
+        while insert_idx < len(lines) and lines[insert_idx].strip() == "":
+            insert_idx += 1
+        # Find where existing bullets end
+        while insert_idx < len(lines) and lines[insert_idx].strip().startswith("-"):
+            insert_idx += 1
+        # Insert new bullets before the blank line
+        lines.insert(insert_idx, changelog_bullets)
+    else:
+        # Create ## Unreleased section before first version
+        if first_version_idx is not None:
+            new_entry = f"## Unreleased\n\n{changelog_bullets}\n"
+            lines.insert(first_version_idx, new_entry)
+        else:
+            # No versions exist - append after preamble
+            # Find end of preamble (last non-empty line before we'd insert)
+            insert_idx = len(lines)
+            for i in range(len(lines) - 1, -1, -1):
+                if lines[i].strip():
+                    insert_idx = i + 1
+                    break
+            new_entry = f"\n## Unreleased\n\n{changelog_bullets}\n"
+            lines.insert(insert_idx, new_entry)
+
+    # Write back
+    with open(changelog_path, "w") as f:
+        f.write("\n".join(lines))
+
+    log_func("\n✓ Changes added to ## Unreleased", to_console=True)
+
+
 def update_changelog_with_suggestions(
     module_path: Path, analysis: dict[str, Any], log_func: Callable[..., None]
 ) -> str | None:

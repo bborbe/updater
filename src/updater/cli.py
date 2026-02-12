@@ -7,7 +7,7 @@ from datetime import datetime
 from pathlib import Path
 
 from . import config
-from .changelog import update_changelog_with_suggestions
+from .changelog import add_to_unreleased, update_changelog_with_suggestions
 from .claude_analyzer import analyze_changes_with_claude, verify_claude_auth
 from .docker_updater import update_dockerfile_images
 from .file_utils import condense_file_list
@@ -205,6 +205,37 @@ async def process_single_go_module(module_path: Path, update_deps: bool = True) 
         # Phase 4: Update CHANGELOG with Claude's suggestions
         changelog_path = module_path / "CHANGELOG.md"
 
+        # Handle --no-tag mode (add to Unreleased, no version/tag)
+        if config.NO_TAG:
+            if not changelog_path.exists():
+                log_message(
+                    "\n→ No CHANGELOG.md found, committing without changes", to_console=True
+                )
+                print_commit_summary(
+                    module_path.name,
+                    analysis,
+                    note="No CHANGELOG.md found (--no-tag mode)",
+                )
+            else:
+                add_to_unreleased(module_path, analysis, log_func=log_message)
+                print_commit_summary(
+                    module_path.name,
+                    analysis,
+                    note="Changes added to ## Unreleased (--no-tag mode)",
+                )
+
+            # Ask for confirmation if required
+            if config.REQUIRE_CONFIRM:
+                if not prompt_yes_no("\nProceed with commit (no tag)?", default_yes=True):
+                    log_message("\n⚠ Skipped by user", to_console=True)
+                    log_message("  Changes are staged but not committed", to_console=True)
+                    return (True, "skipped")
+
+            git_commit(module_path, analysis["commit_message"], log_func=log_message)
+            log_message("\n✓ Commit completed successfully!", to_console=True)
+            return (True, "updated")
+
+        # Normal mode: create version and tag
         if not changelog_path.exists():
             # No CHANGELOG.md - commit without tag
             log_message("\n→ No CHANGELOG.md found, committing without tag", to_console=True)
@@ -373,6 +404,37 @@ async def process_single_python_module(module_path: Path) -> tuple[bool, str]:
         # Phase 4: Update CHANGELOG with Claude's suggestions
         changelog_path = module_path / "CHANGELOG.md"
 
+        # Handle --no-tag mode (add to Unreleased, no version/tag)
+        if config.NO_TAG:
+            if not changelog_path.exists():
+                log_message(
+                    "\n→ No CHANGELOG.md found, committing without changes", to_console=True
+                )
+                print_commit_summary(
+                    module_path.name,
+                    analysis,
+                    note="No CHANGELOG.md found (--no-tag mode)",
+                )
+            else:
+                add_to_unreleased(module_path, analysis, log_func=log_message)
+                print_commit_summary(
+                    module_path.name,
+                    analysis,
+                    note="Changes added to ## Unreleased (--no-tag mode)",
+                )
+
+            # Ask for confirmation if required
+            if config.REQUIRE_CONFIRM:
+                if not prompt_yes_no("\nProceed with commit (no tag)?", default_yes=True):
+                    log_message("\n⚠ Skipped by user", to_console=True)
+                    log_message("  Changes are staged but not committed", to_console=True)
+                    return (True, "skipped")
+
+            git_commit(module_path, analysis["commit_message"], log_func=log_message)
+            log_message("\n✓ Commit completed successfully!", to_console=True)
+            return (True, "updated")
+
+        # Normal mode: create version and tag
         if not changelog_path.exists():
             log_message("\n→ No CHANGELOG.md found, committing without tag", to_console=True)
 
@@ -532,6 +594,11 @@ async def main_async() -> int:
         action="store_true",
         help="Skip git branch checkout and pull (useful for worktree conflicts)",
     )
+    parser.add_argument(
+        "--no-tag",
+        action="store_true",
+        help="Add changes to ## Unreleased instead of creating version/tag (useful for PRs)",
+    )
 
     args = parser.parse_args()
 
@@ -539,6 +606,7 @@ async def main_async() -> int:
     config.VERBOSE_MODE = args.verbose
     config.MODEL = args.model
     config.REQUIRE_CONFIRM = args.require_commit_confirm
+    config.NO_TAG = args.no_tag
     config.RUN_TIMESTAMP = datetime.now().strftime("%Y-%m-%d-%H%M%S")
 
     # Step 0: Verify Claude authentication
