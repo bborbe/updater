@@ -717,8 +717,27 @@ async def main_async() -> int:
             results.append((mod, success, status, project_type))
 
         # Summary
+        # Find common base path for all modules
+        common_path = None
+        if all_modules:
+            module_paths_list = [mod for mod, _ in all_modules]
+            if len(module_paths_list) == 1:
+                common_path = module_paths_list[0].parent
+            else:
+                # Find common parent directory
+                common_path = module_paths_list[0]
+                for mod_path in module_paths_list[1:]:
+                    # Find common ancestor
+                    while common_path not in mod_path.parents and common_path != mod_path:
+                        common_path = common_path.parent
+                        if common_path == common_path.parent:  # Reached root
+                            break
+
         print("\n" + "=" * 70)
-        print(f"SUMMARY: {total_modules} module(s)")
+        if common_path:
+            print(f"SUMMARY: {total_modules} module(s) in {common_path}")
+        else:
+            print(f"SUMMARY: {total_modules} module(s)")
         print("=" * 70)
 
         updated = [mod for mod, _, status, _ in results if status == "updated"]

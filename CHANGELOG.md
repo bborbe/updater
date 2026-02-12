@@ -8,6 +8,9 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## v0.9.1
+- Show base path in summary output for multi-module updates
+
 ## v0.9.0
 - Add categorized summary output (Updated, Already up to date, Skipped, Failed)
 - Change module processing return types to include status information
