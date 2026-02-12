@@ -1,6 +1,25 @@
 """Module discovery for Go and Python projects."""
 
+import os
 from pathlib import Path
+
+# Directories to skip during recursive search (performance optimization)
+SKIP_DIRS = {".venv", "vendor", "node_modules", ".git", "__pycache__"}
+
+
+def _walk_filtered(parent_path: Path):
+    """Walk directory tree, skipping SKIP_DIRS for performance.
+
+    Yields paths to all files, excluding files in skipped directories.
+    Much faster than rglob() on large repos with vendor directories.
+    """
+    for root, dirs, files in os.walk(parent_path):
+        # Modify dirs in-place to skip directories
+        dirs[:] = [d for d in dirs if d not in SKIP_DIRS]
+
+        root_path = Path(root)
+        for file in files:
+            yield root_path / file
 
 
 def _module_sort_key(module_path: Path, parent_path: Path) -> tuple:
@@ -72,13 +91,10 @@ def discover_go_modules(parent_path: Path, recursive: bool = False) -> list[Path
     parent = Path(parent_path)
 
     if recursive:
-        # Recursive search - find all go.mod files
-        for item in parent.rglob("go.mod"):
-            if item.is_file():
-                module_dir = item.parent
-                # Skip vendor directories
-                if "vendor" not in module_dir.parts:
-                    modules.append(module_dir)
+        # Recursive search - find all go.mod files (skips vendor/node_modules/etc during walk)
+        for item in _walk_filtered(parent):
+            if item.name == "go.mod":
+                modules.append(item.parent)
     else:
         # Non-recursive - only direct children (original behavior)
         for item in sorted(parent.iterdir()):
@@ -112,13 +128,10 @@ def discover_python_modules(parent_path: Path, recursive: bool = False) -> list[
     parent = Path(parent_path)
 
     if recursive:
-        # Recursive search - find all pyproject.toml files
-        for item in parent.rglob("pyproject.toml"):
-            if item.is_file():
+        # Recursive search - find all pyproject.toml files (skips .venv/vendor/etc during walk)
+        for item in _walk_filtered(parent):
+            if item.name == "pyproject.toml":
                 module_dir = item.parent
-                # Skip .venv directories
-                if ".venv" in module_dir.parts:
-                    continue
                 # Require uv.lock for modern project detection
                 if (module_dir / "uv.lock").exists():
                     modules.append(module_dir)
@@ -187,23 +200,10 @@ def discover_legacy_python_projects(parent_path: Path, recursive: bool = False) 
     parent = Path(parent_path)
 
     if recursive:
-        # Find requirements.txt files
-        for item in parent.rglob("requirements.txt"):
-            if item.is_file():
+        # Find requirements.txt and setup.py files (skips .venv/vendor/node_modules during walk)
+        for item in _walk_filtered(parent):
+            if item.name == "requirements.txt" or item.name == "setup.py":
                 project_dir = item.parent
-                # Skip .venv, vendor, and node_modules directories
-                if any(d in project_dir.parts for d in (".venv", "vendor", "node_modules")):
-                    continue
-                if is_legacy_python_project(project_dir):
-                    projects.append(project_dir)
-
-        # Also find setup.py without pyproject.toml
-        for item in parent.rglob("setup.py"):
-            if item.is_file():
-                project_dir = item.parent
-                # Skip .venv, vendor, and node_modules directories
-                if any(d in project_dir.parts for d in (".venv", "vendor", "node_modules")):
-                    continue
                 if is_legacy_python_project(project_dir) and project_dir not in projects:
                     projects.append(project_dir)
     else:
@@ -229,13 +229,10 @@ def discover_docker_projects(parent_path: Path, recursive: bool = False) -> list
     parent = Path(parent_path)
 
     if recursive:
-        # Find all Dockerfiles
-        for item in parent.rglob("Dockerfile"):
-            if item.is_file():
+        # Find all Dockerfiles (skips .venv/vendor/node_modules during walk)
+        for item in _walk_filtered(parent):
+            if item.name == "Dockerfile":
                 project_dir = item.parent
-                # Skip .venv, vendor, and node_modules directories
-                if any(d in project_dir.parts for d in (".venv", "vendor", "node_modules")):
-                    continue
                 # Only include if NOT a Go or Python module
                 has_go_mod = (project_dir / "go.mod").exists()
                 has_python = (project_dir / "pyproject.toml").exists()
