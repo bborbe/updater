@@ -191,8 +191,8 @@ def discover_legacy_python_projects(parent_path: Path, recursive: bool = False) 
         for item in parent.rglob("requirements.txt"):
             if item.is_file():
                 project_dir = item.parent
-                # Skip .venv directories
-                if ".venv" in project_dir.parts:
+                # Skip .venv, vendor, and node_modules directories
+                if any(d in project_dir.parts for d in (".venv", "vendor", "node_modules")):
                     continue
                 if is_legacy_python_project(project_dir):
                     projects.append(project_dir)
@@ -201,7 +201,8 @@ def discover_legacy_python_projects(parent_path: Path, recursive: bool = False) 
         for item in parent.rglob("setup.py"):
             if item.is_file():
                 project_dir = item.parent
-                if ".venv" in project_dir.parts:
+                # Skip .venv, vendor, and node_modules directories
+                if any(d in project_dir.parts for d in (".venv", "vendor", "node_modules")):
                     continue
                 if is_legacy_python_project(project_dir) and project_dir not in projects:
                     projects.append(project_dir)
