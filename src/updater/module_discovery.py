@@ -232,8 +232,8 @@ def discover_docker_projects(parent_path: Path, recursive: bool = False) -> list
         for item in parent.rglob("Dockerfile"):
             if item.is_file():
                 project_dir = item.parent
-                # Skip .venv directories
-                if ".venv" in project_dir.parts:
+                # Skip .venv and vendor directories
+                if ".venv" in project_dir.parts or "vendor" in project_dir.parts:
                     continue
                 # Only include if NOT a Go or Python module
                 has_go_mod = (project_dir / "go.mod").exists()

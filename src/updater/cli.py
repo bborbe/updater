@@ -447,16 +447,22 @@ async def process_module_with_retry(
             updated, updates = update_dockerfile_images(module_path, log_func=log_message)
 
             if updated:
-                # Generate commit message from updates
-                if len(updates) == 1:
-                    commit_msg = f"Update Dockerfile: {updates[0]}"
-                else:
-                    commit_msg = f"Update Dockerfile images\n\n" + "\n".join(f"- {u}" for u in updates)
+                # Check if there are actually uncommitted changes
+                change_count, _ = check_git_status(module_path)
 
-                # Commit changes
-                log_message("\n=== Committing Changes ===", to_console=True)
-                git_commit(module_path, commit_msg, log_func=log_message)
-                log_message("\n✓ Dockerfile updated and committed", to_console=True)
+                if change_count > 0:
+                    # Generate commit message from updates
+                    if len(updates) == 1:
+                        commit_msg = f"Update Dockerfile: {updates[0]}"
+                    else:
+                        commit_msg = f"Update Dockerfile images\n\n" + "\n".join(f"- {u}" for u in updates)
+
+                    # Commit changes
+                    log_message("\n=== Committing Changes ===", to_console=True)
+                    git_commit(module_path, commit_msg, log_func=log_message)
+                    log_message("\n✓ Dockerfile updated and committed", to_console=True)
+                else:
+                    log_message("\n✓ Dockerfile updated (already matches committed version)", to_console=True)
             else:
                 log_message("\n✓ Dockerfile already up to date", to_console=True)
 
