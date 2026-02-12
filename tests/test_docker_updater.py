@@ -108,9 +108,11 @@ class TestUpdateDockerfileImages:
 
         with patch("updater.docker_updater.get_latest_golang_version") as mock_go:
             mock_go.return_value = "1.23.5"
-            result = update_dockerfile_images(tmp_path, log_func=log_func)
+            updated, updates = update_dockerfile_images(tmp_path, log_func=log_func)
 
-        assert result is True
+        assert updated is True
+        assert len(updates) == 1
+        assert "golang:1.22.0 → golang:1.23.5" in updates[0]
         assert "golang:1.23.5" in dockerfile.read_text()
 
     def test_updates_python_version(self, tmp_path):
@@ -122,9 +124,11 @@ class TestUpdateDockerfileImages:
 
         with patch("updater.docker_updater.get_latest_python_version") as mock_py:
             mock_py.return_value = "3.12"
-            result = update_dockerfile_images(tmp_path, log_func=log_func)
+            updated, updates = update_dockerfile_images(tmp_path, log_func=log_func)
 
-        assert result is True
+        assert updated is True
+        assert len(updates) == 1
+        assert "python:3.11-slim → python:3.12-slim" in updates[0]
         assert "python:3.12-slim" in dockerfile.read_text()
 
     def test_updates_alpine_version(self, tmp_path):
@@ -136,9 +140,11 @@ class TestUpdateDockerfileImages:
 
         with patch("updater.docker_updater.get_latest_alpine_version") as mock_alpine:
             mock_alpine.return_value = "3.20"
-            result = update_dockerfile_images(tmp_path, log_func=log_func)
+            updated, updates = update_dockerfile_images(tmp_path, log_func=log_func)
 
-        assert result is True
+        assert updated is True
+        assert len(updates) == 1
+        assert "alpine:3.19 → alpine:3.20" in updates[0]
         assert "alpine:3.20" in dockerfile.read_text()
 
     def test_updates_multiple_images(self, tmp_path):
@@ -159,9 +165,10 @@ COPY --from=build /app /app
         ):
             mock_go.return_value = "1.23.5"
             mock_alpine.return_value = "3.20"
-            result = update_dockerfile_images(tmp_path, log_func=log_func)
+            updated, updates = update_dockerfile_images(tmp_path, log_func=log_func)
 
-        assert result is True
+        assert updated is True
+        assert len(updates) == 2
         content = dockerfile.read_text()
         assert "golang:1.23.5" in content
         assert "alpine:3.20" in content
@@ -175,9 +182,10 @@ COPY --from=build /app /app
 
         with patch("updater.docker_updater.get_latest_golang_version") as mock_go:
             mock_go.return_value = "1.23.5"
-            result = update_dockerfile_images(tmp_path, log_func=log_func)
+            updated, updates = update_dockerfile_images(tmp_path, log_func=log_func)
 
-        assert result is False
+        assert updated is False
+        assert updates == []
 
     def test_skips_scratch(self, tmp_path):
         """Test that scratch image is not updated."""
@@ -185,9 +193,10 @@ COPY --from=build /app /app
         dockerfile.write_text("FROM scratch\nCOPY /app /app\n")
 
         log_func = MagicMock()
-        result = update_dockerfile_images(tmp_path, log_func=log_func)
+        updated, updates = update_dockerfile_images(tmp_path, log_func=log_func)
 
-        assert result is False
+        assert updated is False
+        assert updates == []
         assert "FROM scratch" in dockerfile.read_text()
 
     def test_skips_unknown_images(self, tmp_path):
@@ -196,18 +205,20 @@ COPY --from=build /app /app
         dockerfile.write_text("FROM someregistry/customimage:v1.0.0\n")
 
         log_func = MagicMock()
-        result = update_dockerfile_images(tmp_path, log_func=log_func)
+        updated, updates = update_dockerfile_images(tmp_path, log_func=log_func)
 
-        assert result is False
+        assert updated is False
+        assert updates == []
         # Image unchanged
         assert "someregistry/customimage:v1.0.0" in dockerfile.read_text()
 
     def test_no_dockerfile(self, tmp_path):
         """Test when no Dockerfile exists."""
         log_func = MagicMock()
-        result = update_dockerfile_images(tmp_path, log_func=log_func)
+        updated, updates = update_dockerfile_images(tmp_path, log_func=log_func)
 
-        assert result is False
+        assert updated is False
+        assert updates == []
 
     def test_preserves_tag_suffix(self, tmp_path):
         """Test that tag suffixes like -slim, -alpine are preserved."""
@@ -218,9 +229,10 @@ COPY --from=build /app /app
 
         with patch("updater.docker_updater.get_latest_python_version") as mock_py:
             mock_py.return_value = "3.12"
-            result = update_dockerfile_images(tmp_path, log_func=log_func)
+            updated, updates = update_dockerfile_images(tmp_path, log_func=log_func)
 
-        assert result is True
+        assert updated is True
+        assert len(updates) == 1
         # Should update version but keep suffix
         content = dockerfile.read_text()
         assert "python:3.12" in content

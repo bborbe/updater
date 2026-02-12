@@ -101,7 +101,7 @@ def _update_image_tag(current_tag: str | None, new_version: str, version_type: s
 
 def update_dockerfile_images(
     module_path: Path, log_func: Callable[..., None] = log_message
-) -> bool:
+) -> tuple[bool, list[str]]:
     """Update all known base images in Dockerfile to latest versions.
 
     Supports: golang, python, alpine
@@ -111,18 +111,19 @@ def update_dockerfile_images(
         log_func: Logging function
 
     Returns:
-        True if any updates were made, False otherwise
+        Tuple of (updated: bool, updates: list[str]) where updates contains
+        human-readable update descriptions like "golang:1.25.7 → golang:1.26.0"
     """
     dockerfile = module_path / "Dockerfile"
     if not dockerfile.exists():
-        return False
+        return False, []
 
     log_func("\n=== Docker Image Updates ===", to_console=True)
 
     images = parse_dockerfile_images(dockerfile)
     if not images:
         log_func("  No FROM statements found", to_console=True)
-        return False
+        return False, []
 
     content = dockerfile.read_text()
     original_content = content
@@ -158,7 +159,7 @@ def update_dockerfile_images(
         for update in updates_made:
             log_func(f"  → {update}", to_console=True)
         log_func("\n✓ Dockerfile images updated", to_console=True)
-        return True
+        return True, updates_made
 
     log_func("✓ Dockerfile images are up to date", to_console=True)
-    return False
+    return False, []

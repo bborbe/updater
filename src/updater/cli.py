@@ -439,15 +439,27 @@ async def process_module_with_retry(
         if project_type == "python":
             success = await process_single_python_module(module_path)
         elif project_type == "docker":
-            # Docker projects: just update Dockerfile images, no commit
+            # Docker projects: update Dockerfile images and commit
             log_message(f"\n{'=' * 70}", to_console=True)
             log_message(f"Docker Project: {module_path.name}", to_console=True)
             log_message("=" * 70, to_console=True)
-            updated = update_dockerfile_images(module_path, log_func=log_message)
+
+            updated, updates = update_dockerfile_images(module_path, log_func=log_message)
+
             if updated:
-                log_message("\n✓ Dockerfile updated (review and commit manually)", to_console=True)
+                # Generate commit message from updates
+                if len(updates) == 1:
+                    commit_msg = f"Update Dockerfile: {updates[0]}"
+                else:
+                    commit_msg = f"Update Dockerfile images\n\n" + "\n".join(f"- {u}" for u in updates)
+
+                # Commit changes
+                log_message("\n=== Committing Changes ===", to_console=True)
+                git_commit(module_path, commit_msg, log_func=log_message)
+                log_message("\n✓ Dockerfile updated and committed", to_console=True)
             else:
                 log_message("\n✓ Dockerfile already up to date", to_console=True)
+
             success = True
         else:
             success = await process_single_go_module(module_path, update_deps=update_deps)
@@ -1061,11 +1073,13 @@ async def main_docker_async() -> int:
             for df in path.rglob("Dockerfile"):
                 if ".venv" not in df.parts:
                     print(f"\n→ {df.parent}")
-                    if update_dockerfile_images(df.parent, log_func=log_message):
+                    updated, _ = update_dockerfile_images(df.parent, log_func=log_message)
+                    if updated:
                         any_updates = True
         else:
             print(f"\n→ {path}")
-            if update_dockerfile_images(path, log_func=log_message):
+            updated, _ = update_dockerfile_images(path, log_func=log_message)
+            if updated:
                 any_updates = True
 
     if any_updates:
