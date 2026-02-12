@@ -423,7 +423,7 @@ async def process_module_with_retry(
 
     Args:
         module_path: Path to the module
-        project_type: Type of project ("go" or "python")
+        project_type: Type of project ("go", "python", or "docker")
         update_deps: Whether to update dependencies for Go modules (default: True)
 
     Returns:
@@ -438,6 +438,17 @@ async def process_module_with_retry(
 
         if project_type == "python":
             success = await process_single_python_module(module_path)
+        elif project_type == "docker":
+            # Docker projects: just update Dockerfile images, no commit
+            log_message(f"\n{'=' * 70}", to_console=True)
+            log_message(f"Docker Project: {module_path.name}", to_console=True)
+            log_message("=" * 70, to_console=True)
+            updated = update_dockerfile_images(module_path, log_func=log_message)
+            if updated:
+                log_message("\n✓ Dockerfile updated (review and commit manually)", to_console=True)
+            else:
+                log_message("\n✓ Dockerfile already up to date", to_console=True)
+            success = True
         else:
             success = await process_single_go_module(module_path, update_deps=update_deps)
 
@@ -524,6 +535,7 @@ async def main_async() -> int:
     # Discover modules from each provided path
     go_modules: list[Path] = []
     python_modules: list[Path] = []
+    docker_projects: list[Path] = []
     legacy_projects: list[Path] = []
 
     for module_path in module_paths:
@@ -532,16 +544,21 @@ async def main_async() -> int:
             go_modules.append(module_path)
         elif (module_path / "pyproject.toml").exists() and (module_path / "uv.lock").exists():
             python_modules.append(module_path)
+        elif (module_path / "Dockerfile").exists():
+            # Standalone Dockerfile (not in Go/Python project)
+            docker_projects.append(module_path)
         else:
             # Search recursively
             discovered = discover_all_modules(module_path, recursive=True)
             go_modules.extend(discovered["go"])
             python_modules.extend(discovered["python"])
+            docker_projects.extend(discovered["docker"])
             legacy_projects.extend(discovered["legacy"])
 
     # Remove duplicates while preserving order
     go_modules = list(dict.fromkeys(go_modules))
     python_modules = list(dict.fromkeys(python_modules))
+    docker_projects = list(dict.fromkeys(docker_projects))
     legacy_projects = list(dict.fromkeys(legacy_projects))
 
     # Warn about legacy projects
@@ -551,7 +568,7 @@ async def main_async() -> int:
             print(f"  - {proj}")
         print('  → Run "uv init" to migrate to modern Python packaging\n')
 
-    total_modules = len(go_modules) + len(python_modules)
+    total_modules = len(go_modules) + len(python_modules) + len(docker_projects)
 
     if total_modules == 0:
         print("✗ No modules found in provided path(s)")
@@ -568,12 +585,18 @@ async def main_async() -> int:
         for mod in python_modules:
             print(f"  - {mod}")
 
+    if docker_projects:
+        print(f"Docker projects: {len(docker_projects)}")
+        for mod in docker_projects:
+            print(f"  - {mod}")
+
     print()
 
     # Combine all modules with their types
     all_modules: list[tuple[Path, str]] = []
     all_modules.extend((mod, "go") for mod in go_modules)
     all_modules.extend((mod, "python") for mod in python_modules)
+    all_modules.extend((mod, "docker") for mod in docker_projects)
 
     # Find unique git repos for all modules
     module_repos = set()
@@ -643,7 +666,12 @@ async def main_async() -> int:
     # Process modules
     if total_modules == 1:
         module, project_type = all_modules[0]
-        lang = "Go" if project_type == "go" else "Python"
+        if project_type == "go":
+            lang = "Go"
+        elif project_type == "python":
+            lang = "Python"
+        else:
+            lang = "Docker"
         print(f"=== Updating {lang} Module: {module} ===\n")
         success, status = await process_module_with_retry(module, project_type=project_type)
         play_completion_sound()

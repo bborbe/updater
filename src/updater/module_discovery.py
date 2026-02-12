@@ -214,18 +214,62 @@ def discover_legacy_python_projects(parent_path: Path, recursive: bool = False) 
     return projects
 
 
-def discover_all_modules(parent_path: Path, recursive: bool = False) -> dict[str, list[Path]]:
-    """Discover all modules (Go and Python) in a directory.
+def discover_docker_projects(parent_path: Path, recursive: bool = False) -> list[Path]:
+    """Discover standalone Docker projects (Dockerfile without go.mod/pyproject.toml).
 
     Args:
         parent_path: Parent directory to search in
         recursive: If True, search recursively in all subdirectories
 
     Returns:
-        Dictionary with keys 'go', 'python', 'legacy' mapping to lists of paths
+        List of paths to directories with standalone Dockerfiles
+    """
+    projects = []
+    parent = Path(parent_path)
+
+    if recursive:
+        # Find all Dockerfiles
+        for item in parent.rglob("Dockerfile"):
+            if item.is_file():
+                project_dir = item.parent
+                # Skip .venv directories
+                if ".venv" in project_dir.parts:
+                    continue
+                # Only include if NOT a Go or Python module
+                has_go_mod = (project_dir / "go.mod").exists()
+                has_python = (project_dir / "pyproject.toml").exists()
+                if not has_go_mod and not has_python:
+                    projects.append(project_dir)
+    else:
+        for item in sorted(parent.iterdir()):
+            if item.is_dir():
+                dockerfile = item / "Dockerfile"
+                if dockerfile.exists():
+                    # Only include if NOT a Go or Python module
+                    has_go_mod = (item / "go.mod").exists()
+                    has_python = (item / "pyproject.toml").exists()
+                    if not has_go_mod and not has_python:
+                        projects.append(item)
+
+    # Remove duplicates and sort
+    projects = list(dict.fromkeys(projects))
+    projects.sort()
+    return projects
+
+
+def discover_all_modules(parent_path: Path, recursive: bool = False) -> dict[str, list[Path]]:
+    """Discover all modules (Go, Python, and Docker) in a directory.
+
+    Args:
+        parent_path: Parent directory to search in
+        recursive: If True, search recursively in all subdirectories
+
+    Returns:
+        Dictionary with keys 'go', 'python', 'docker', 'legacy' mapping to lists of paths
     """
     return {
         "go": discover_go_modules(parent_path, recursive=recursive),
         "python": discover_python_modules(parent_path, recursive=recursive),
+        "docker": discover_docker_projects(parent_path, recursive=recursive),
         "legacy": discover_legacy_python_projects(parent_path, recursive=recursive),
     }
