@@ -1,5 +1,7 @@
 """Tests for Python version updater."""
 
+import pytest
+
 from updater.python_version_updater import (
     get_latest_python_version,
     update_dockerfile_python,
@@ -9,6 +11,7 @@ from updater.python_version_updater import (
 )
 
 
+@pytest.mark.skip(reason="Flaky: depends on python.org API availability and rate limits")
 def test_get_latest_python_version():
     """Test fetching latest Python version."""
     version = get_latest_python_version()
@@ -237,11 +240,11 @@ CMD ["skeleton", "serve"]
     assert 'CMD ["skeleton", "serve"]' in result
 
 
-def test_update_python_versions(tmp_path):
+def test_update_python_versions(tmp_path, monkeypatch):
     """Test the orchestrating function that updates all Python version files."""
-    # Get the latest version first so we know what to expect
-    latest = get_latest_python_version()
-    assert latest is not None
+    # Mock get_latest_python_version to avoid network calls
+    latest = "3.14"
+    monkeypatch.setattr("updater.python_version_updater.get_latest_python_version", lambda: latest)
 
     # Create .python-version with old version
     version_file = tmp_path / ".python-version"
@@ -277,10 +280,11 @@ python_version = "3.11"
     assert f"FROM python:{latest}-slim" in dockerfile_content
 
 
-def test_update_python_versions_no_changes_needed(tmp_path):
+def test_update_python_versions_no_changes_needed(tmp_path, monkeypatch):
     """Test when versions are already up to date."""
-    # Get latest version first
-    latest = get_latest_python_version()
+    # Mock get_latest_python_version to avoid network calls
+    latest = "3.14"
+    monkeypatch.setattr("updater.python_version_updater.get_latest_python_version", lambda: latest)
 
     # Create files with latest version
     version_file = tmp_path / ".python-version"

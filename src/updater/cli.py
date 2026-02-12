@@ -527,6 +527,11 @@ async def main_async() -> int:
         action="store_true",
         help="Require user confirmation before committing (default: auto-commit)",
     )
+    parser.add_argument(
+        "--skip-git-update",
+        action="store_true",
+        help="Skip git branch checkout and pull (useful for worktree conflicts)",
+    )
 
     args = parser.parse_args()
 
@@ -632,25 +637,29 @@ async def main_async() -> int:
             module_repos.add(module_repo)
 
     # Step 2: Update git repositories
-    print("=== Step 2: Update Git Repositories ===\n")
-    print(f"Updating {len(module_repos)} unique git repository(ies)\n")
+    if args.skip_git_update:
+        print("=== Step 2: Update Git Repositories ===\n")
+        print("⚠ Skipping git update (--skip-git-update flag set)\n")
+    else:
+        print("=== Step 2: Update Git Repositories ===\n")
+        print(f"Updating {len(module_repos)} unique git repository(ies)\n")
 
-    update_errors = []
+        update_errors = []
 
-    for repo in sorted(module_repos):
-        print(f"→ {repo.name}")
-        if not update_git_branch(repo):
-            update_errors.append(repo)
+        for repo in sorted(module_repos):
+            print(f"→ {repo.name}")
+            if not update_git_branch(repo):
+                update_errors.append(repo)
 
-    print()
+        print()
 
-    if update_errors:
-        print("✗ Failed to update repositories:\n")
-        for repo in update_errors:
-            print(f"  - {repo}")
-        print("\nCannot proceed. Please fix errors and try again.")
-        play_completion_sound()
-        return 1
+        if update_errors:
+            print("✗ Failed to update repositories:\n")
+            for repo in update_errors:
+                print(f"  - {repo}")
+            print("\nCannot proceed. Please fix errors and try again.")
+            play_completion_sound()
+            return 1
 
     # Step 3: Check for uncommitted changes
     print("=== Step 3: Check for Uncommitted Changes ===\n")

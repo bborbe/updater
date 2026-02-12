@@ -8,6 +8,11 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## v0.10.0
+- Add --skip-git-update flag to skip git branch checkout and pull (useful for worktree conflicts)
+- Fix Python syntax error in exception handling (old Python 2 syntax)
+- Mock network calls in tests to avoid flaky failures from python.org rate limiting
+
 ## v0.9.1
 - Show base path in summary output for multi-module updates
 
