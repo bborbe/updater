@@ -30,7 +30,7 @@ def play_sound(sound_file: str) -> None:
             stderr=subprocess.DEVNULL,
             start_new_session=True,  # Detach from parent to prevent asyncio waitpid hang
         )
-    except (FileNotFoundError, subprocess.SubprocessError):
+    except FileNotFoundError, subprocess.SubprocessError:
         # afplay not available or failed - fail silently
         pass
 

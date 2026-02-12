@@ -75,7 +75,7 @@ def print_commit_summary(
     print("=" * 60)
 
 
-async def process_single_go_module(module_path: Path, update_deps: bool = True) -> bool:
+async def process_single_go_module(module_path: Path, update_deps: bool = True) -> tuple[bool, str]:
     """Process a single Go module.
 
     Creates a new Claude session for analyzing changes to ensure clean, isolated analysis.
@@ -85,7 +85,8 @@ async def process_single_go_module(module_path: Path, update_deps: bool = True) 
         update_deps: Whether to update dependencies (default: True)
 
     Returns:
-        True if successful, False on error
+        Tuple of (success: bool, status: str)
+        status can be: 'updated', 'up-to-date', 'skipped', 'failed'
     """
     log_file = None
     try:
@@ -105,7 +106,7 @@ async def process_single_go_module(module_path: Path, update_deps: bool = True) 
         git_repo = find_git_repo(module_path)
         if not git_repo:
             log_message("✗ No git repository found", to_console=True)
-            return False
+            return (False, "failed")
 
         # Phase 1a: Update runtime versions (golang, alpine)
         version_updates = update_versions(module_path, log_func=log_message)
@@ -129,11 +130,11 @@ async def process_single_go_module(module_path: Path, update_deps: bool = True) 
 
         if change_count == 0 and not updates_made:
             log_message("\n✓ No updates needed - module is already up to date", to_console=True)
-            return True
+            return (True, "up-to-date")
 
         if change_count == 0:
             log_message("\n✓ No changes detected after dependency update", to_console=True)
-            return True
+            return (True, "up-to-date")
 
         if updates_made:
             log_message(
@@ -162,7 +163,7 @@ async def process_single_go_module(module_path: Path, update_deps: bool = True) 
                 "\n✓ No changes remain after precommit (auto-formatted/fixed)",
                 to_console=True,
             )
-            return True
+            return (True, "up-to-date")
 
         log_message(f"→ {change_count} file(s) changed after precommit", to_console=True)
 
@@ -194,12 +195,12 @@ async def process_single_go_module(module_path: Path, update_deps: bool = True) 
                 if not prompt_yes_no("\nProceed with commit (no tag)?", default_yes=True):
                     log_message("\n⚠ Skipped by user", to_console=True)
                     log_message("  Changes are staged but not committed", to_console=True)
-                    return True
+                    return (True, "skipped")
 
             git_commit(module_path, analysis["commit_message"], log_func=log_message)
             ensure_changelog_tag(module_path, log_func=log_message)
             log_message("\n✓ Commit completed successfully!", to_console=True)
-            return True
+            return (True, "updated")
 
         # Phase 4: Update CHANGELOG with Claude's suggestions
         changelog_path = module_path / "CHANGELOG.md"
@@ -219,11 +220,11 @@ async def process_single_go_module(module_path: Path, update_deps: bool = True) 
                 if not prompt_yes_no("\nProceed with commit (no tag)?", default_yes=True):
                     log_message("\n⚠ Skipped by user", to_console=True)
                     log_message("  Changes are staged but not committed", to_console=True)
-                    return True
+                    return (True, "skipped")
 
             git_commit(module_path, analysis["commit_message"], log_func=log_message)
             log_message("\n✓ Commit completed successfully!", to_console=True)
-            return True
+            return (True, "updated")
 
         # CHANGELOG.md exists - update and create tag
         new_version = update_changelog_with_suggestions(module_path, analysis, log_func=log_message)
@@ -236,25 +237,25 @@ async def process_single_go_module(module_path: Path, update_deps: bool = True) 
             if not prompt_yes_no("\nProceed with commit and tag?", default_yes=True):
                 log_message("\n⚠ Skipped by user", to_console=True)
                 log_message("  Changes are staged but not committed", to_console=True)
-                return True
+                return (True, "skipped")
 
         git_commit(module_path, analysis["commit_message"], log_func=log_message)
         git_tag_from_changelog(module_path, log_func=log_message)
         log_message("\n✓ Update completed successfully!", to_console=True)
-        return True
+        return (True, "updated")
 
     except Exception as e:
         log_message(f"\n✗ Error processing {module_path}: {e}", to_console=True)
         if config.VERBOSE_MODE:
             traceback.print_exc()
-        return False
+        return (False, "failed")
     finally:
         # Close logging and cleanup old logs
         close_module_logging()
         cleanup_old_logs(module_path)
 
 
-async def process_single_python_module(module_path: Path) -> bool:
+async def process_single_python_module(module_path: Path) -> tuple[bool, str]:
     """Process a single Python module.
 
     Creates a new Claude session for analyzing changes to ensure clean, isolated analysis.
@@ -263,7 +264,8 @@ async def process_single_python_module(module_path: Path) -> bool:
         module_path: Path to the module
 
     Returns:
-        True if successful, False on error
+        Tuple of (success: bool, status: str)
+        status can be: 'updated', 'up-to-date', 'skipped', 'failed'
     """
     log_file = None
     try:
@@ -283,7 +285,7 @@ async def process_single_python_module(module_path: Path) -> bool:
         git_repo = find_git_repo(module_path)
         if not git_repo:
             log_message("✗ No git repository found", to_console=True)
-            return False
+            return (False, "failed")
 
         # Phase 1a: Update Python versions
         version_updates = update_python_versions(module_path, log_func=log_message)
@@ -298,11 +300,11 @@ async def process_single_python_module(module_path: Path) -> bool:
 
         if change_count == 0 and not updates_made:
             log_message("\n✓ No updates needed - module is already up to date", to_console=True)
-            return True
+            return (True, "up-to-date")
 
         if change_count == 0:
             log_message("\n✓ No changes detected after dependency update", to_console=True)
-            return True
+            return (True, "up-to-date")
 
         if updates_made:
             log_message(
@@ -331,7 +333,7 @@ async def process_single_python_module(module_path: Path) -> bool:
                 "\n✓ No changes remain after precommit (auto-formatted/fixed)",
                 to_console=True,
             )
-            return True
+            return (True, "up-to-date")
 
         log_message(f"→ {change_count} file(s) changed after precommit", to_console=True)
 
@@ -361,12 +363,12 @@ async def process_single_python_module(module_path: Path) -> bool:
                 if not prompt_yes_no("\nProceed with commit (no tag)?", default_yes=True):
                     log_message("\n⚠ Skipped by user", to_console=True)
                     log_message("  Changes are staged but not committed", to_console=True)
-                    return True
+                    return (True, "skipped")
 
             git_commit(module_path, analysis["commit_message"], log_func=log_message)
             ensure_changelog_tag(module_path, log_func=log_message)
             log_message("\n✓ Commit completed successfully!", to_console=True)
-            return True
+            return (True, "updated")
 
         # Phase 4: Update CHANGELOG with Claude's suggestions
         changelog_path = module_path / "CHANGELOG.md"
@@ -384,11 +386,11 @@ async def process_single_python_module(module_path: Path) -> bool:
                 if not prompt_yes_no("\nProceed with commit (no tag)?", default_yes=True):
                     log_message("\n⚠ Skipped by user", to_console=True)
                     log_message("  Changes are staged but not committed", to_console=True)
-                    return True
+                    return (True, "skipped")
 
             git_commit(module_path, analysis["commit_message"], log_func=log_message)
             log_message("\n✓ Commit completed successfully!", to_console=True)
-            return True
+            return (True, "updated")
 
         # CHANGELOG.md exists - update and create tag
         new_version = update_changelog_with_suggestions(module_path, analysis, log_func=log_message)
@@ -399,18 +401,18 @@ async def process_single_python_module(module_path: Path) -> bool:
             if not prompt_yes_no("\nProceed with commit and tag?", default_yes=True):
                 log_message("\n⚠ Skipped by user", to_console=True)
                 log_message("  Changes are staged but not committed", to_console=True)
-                return True
+                return (True, "skipped")
 
         git_commit(module_path, analysis["commit_message"], log_func=log_message)
         git_tag_from_changelog(module_path, log_func=log_message)
         log_message("\n✓ Update completed successfully!", to_console=True)
-        return True
+        return (True, "updated")
 
     except Exception as e:
         log_message(f"\n✗ Error processing {module_path}: {e}", to_console=True)
         if config.VERBOSE_MODE:
             traceback.print_exc()
-        return False
+        return (False, "failed")
     finally:
         close_module_logging()
         cleanup_old_logs(module_path)
@@ -428,7 +430,7 @@ async def process_module_with_retry(
 
     Returns:
         Tuple of (success: bool, status: str)
-        status can be: 'success', 'skipped'
+        status can be: 'updated', 'up-to-date', 'skipped', 'failed'
     """
     attempt = 1
 
@@ -437,7 +439,7 @@ async def process_module_with_retry(
             print(f"\n=== Retrying {module_path} (attempt {attempt}) ===\n")
 
         if project_type == "python":
-            success = await process_single_python_module(module_path)
+            success, status = await process_single_python_module(module_path)
         elif project_type == "docker":
             # Docker projects: update Dockerfile images and commit
             log_message(f"\n{'=' * 70}", to_console=True)
@@ -463,20 +465,21 @@ async def process_module_with_retry(
                     log_message("\n=== Committing Changes ===", to_console=True)
                     git_commit(module_path, commit_msg, log_func=log_message)
                     log_message("\n✓ Dockerfile updated and committed", to_console=True)
+                    success, status = True, "updated"
                 else:
                     log_message(
                         "\n✓ Dockerfile updated (already matches committed version)",
                         to_console=True,
                     )
+                    success, status = True, "up-to-date"
             else:
                 log_message("\n✓ Dockerfile already up to date", to_console=True)
-
-            success = True
+                success, status = True, "up-to-date"
         else:
-            success = await process_single_go_module(module_path, update_deps=update_deps)
+            success, status = await process_single_go_module(module_path, update_deps=update_deps)
 
         if success:
-            return True, "success"
+            return True, status
 
         # Failed - prompt for skip or retry
         play_error_sound()
@@ -718,17 +721,30 @@ async def main_async() -> int:
         print(f"SUMMARY: {total_modules} module(s)")
         print("=" * 70)
 
-        successful = [mod for mod, _, status, _ in results if status == "success"]
+        updated = [mod for mod, _, status, _ in results if status == "updated"]
+        up_to_date = [mod for mod, _, status, _ in results if status == "up-to-date"]
         skipped = [mod for mod, _, status, _ in results if status == "skipped"]
+        failed = [mod for mod, _, status, _ in results if status == "failed"]
 
-        print(f"\n✓ Successful: {len(successful)}/{total_modules}")
-        for mod in successful:
-            print(f"  - {mod}")
+        if updated:
+            print(f"\n✓ Updated: {len(updated)}")
+            for mod in updated:
+                print(f"  - {mod.name}")
+
+        if up_to_date:
+            print(f"\n✓ Already up to date: {len(up_to_date)}")
+            for mod in up_to_date:
+                print(f"  - {mod.name}")
 
         if skipped:
-            print(f"\n⚠ Skipped: {len(skipped)}/{total_modules}")
+            print(f"\n⚠ Skipped: {len(skipped)}")
             for mod in skipped:
-                print(f"  - {mod}")
+                print(f"  - {mod.name}")
+
+        if failed:
+            print(f"\n✗ Failed: {len(failed)}")
+            for mod in failed:
+                print(f"  - {mod.name}")
 
         print("\n" + "=" * 70)
 

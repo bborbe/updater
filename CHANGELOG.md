@@ -8,6 +8,11 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## v0.9.0
+- Add categorized summary output (Updated, Already up to date, Skipped, Failed)
+- Change module processing return types to include status information
+- Add type annotation for module discovery iterator
+
 ## v0.8.0
 - Add Docker project support to update-all command with auto-commit
 - Optimize module discovery performance (skip vendor/node_modules during walk)

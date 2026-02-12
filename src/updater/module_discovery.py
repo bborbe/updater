@@ -1,13 +1,14 @@
 """Module discovery for Go and Python projects."""
 
 import os
+from collections.abc import Iterator
 from pathlib import Path
 
 # Directories to skip during recursive search (performance optimization)
 SKIP_DIRS = {".venv", "vendor", "node_modules", ".git", "__pycache__"}
 
 
-def _walk_filtered(parent_path: Path):
+def _walk_filtered(parent_path: Path) -> Iterator[Path]:
     """Walk directory tree, skipping SKIP_DIRS for performance.
 
     Yields paths to all files, excluding files in skipped directories.

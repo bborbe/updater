@@ -40,9 +40,10 @@ class TestProcessSingleModule:
         module_path.mkdir()
 
         with patch("updater.cli.find_git_repo", return_value=None):
-            result = await process_single_go_module(module_path)
+            success, status = await process_single_go_module(module_path)
 
-        assert result is False
+        assert success is False
+        assert status == "failed"
 
     @pytest.mark.asyncio
     async def test_no_updates_needed(self, mock_module_path, reset_config):
@@ -58,9 +59,10 @@ class TestProcessSingleModule:
             patch("updater.cli.close_module_logging"),
             patch("updater.cli.cleanup_old_logs"),
         ):
-            result = await process_single_go_module(mock_module_path)
+            success, status = await process_single_go_module(mock_module_path)
 
-        assert result is True
+        assert success is True
+        assert status == "up-to-date"
 
     @pytest.mark.asyncio
     async def test_updates_made_no_changes_after(self, mock_module_path, reset_config):
@@ -76,9 +78,10 @@ class TestProcessSingleModule:
             patch("updater.cli.close_module_logging"),
             patch("updater.cli.cleanup_old_logs"),
         ):
-            result = await process_single_go_module(mock_module_path)
+            success, status = await process_single_go_module(mock_module_path)
 
-        assert result is True
+        assert success is True
+        assert status == "up-to-date"
 
     @pytest.mark.asyncio
     async def test_with_changes_and_changelog(self, mock_module_path, reset_config):
@@ -117,9 +120,10 @@ class TestProcessSingleModule:
             patch("updater.cli.cleanup_old_logs"),
             patch("builtins.print"),
         ):
-            result = await process_single_go_module(mock_module_path)
+            success, status = await process_single_go_module(mock_module_path)
 
-        assert result is True
+        assert success is True
+        assert status == "updated"
 
     @pytest.mark.asyncio
     async def test_no_changelog_with_version_bump(self, mock_module_path, reset_config):
@@ -152,9 +156,10 @@ class TestProcessSingleModule:
             patch("updater.cli.cleanup_old_logs"),
             patch("builtins.print"),
         ):
-            result = await process_single_go_module(mock_module_path)
+            success, status = await process_single_go_module(mock_module_path)
 
-        assert result is True
+        assert success is True
+        assert status == "updated"
 
     @pytest.mark.asyncio
     async def test_no_version_bump_infrastructure_only(self, mock_module_path, reset_config):
@@ -187,9 +192,10 @@ class TestProcessSingleModule:
             patch("updater.cli.cleanup_old_logs"),
             patch("builtins.print"),
         ):
-            result = await process_single_go_module(mock_module_path)
+            success, status = await process_single_go_module(mock_module_path)
 
-        assert result is True
+        assert success is True
+        assert status == "updated"
 
     @pytest.mark.asyncio
     async def test_exception_handling(self, mock_module_path, reset_config):
@@ -200,9 +206,10 @@ class TestProcessSingleModule:
             patch("updater.cli.close_module_logging"),
             patch("updater.cli.cleanup_old_logs"),
         ):
-            result = await process_single_go_module(mock_module_path)
+            success, status = await process_single_go_module(mock_module_path)
 
-        assert result is False
+        assert success is False
+        assert status == "failed"
 
     @pytest.mark.asyncio
     async def test_with_confirmation_accept(self, mock_module_path, reset_config):
@@ -242,9 +249,10 @@ class TestProcessSingleModule:
             patch("updater.cli.cleanup_old_logs"),
             patch("builtins.print"),
         ):
-            result = await process_single_go_module(mock_module_path)
+            success, status = await process_single_go_module(mock_module_path)
 
-        assert result is True
+        assert success is True
+        assert status == "updated"
 
     @pytest.mark.asyncio
     async def test_with_confirmation_reject(self, mock_module_path, reset_config):
@@ -282,10 +290,11 @@ class TestProcessSingleModule:
             patch("updater.cli.cleanup_old_logs"),
             patch("builtins.print"),
         ):
-            result = await process_single_go_module(mock_module_path)
+            success, status = await process_single_go_module(mock_module_path)
 
         # User rejected, but function returns True (changes staged but not committed)
-        assert result is True
+        assert success is True
+        assert status == "skipped"
 
     @pytest.mark.asyncio
     async def test_changes_cleared_after_precommit(self, mock_module_path, reset_config):
@@ -303,9 +312,10 @@ class TestProcessSingleModule:
             patch("updater.cli.close_module_logging"),
             patch("updater.cli.cleanup_old_logs"),
         ):
-            result = await process_single_go_module(mock_module_path)
+            success, status = await process_single_go_module(mock_module_path)
 
-        assert result is True
+        assert success is True
+        assert status == "up-to-date"
 
 
 class TestProcessModuleWithRetry:
@@ -315,12 +325,14 @@ class TestProcessModuleWithRetry:
     async def test_success_first_try(self, mock_module_path):
         """Test successful processing on first attempt."""
         with patch(
-            "updater.cli.process_single_go_module", new_callable=AsyncMock, return_value=True
+            "updater.cli.process_single_go_module",
+            new_callable=AsyncMock,
+            return_value=(True, "updated"),
         ):
             success, status = await process_module_with_retry(mock_module_path)
 
         assert success is True
-        assert status == "success"
+        assert status == "updated"
 
     @pytest.mark.asyncio
     async def test_retry_then_success(self, mock_module_path):
@@ -329,7 +341,7 @@ class TestProcessModuleWithRetry:
             patch(
                 "updater.cli.process_single_go_module",
                 new_callable=AsyncMock,
-                side_effect=[False, True],
+                side_effect=[(False, "failed"), (True, "updated")],
             ),
             patch("updater.cli.prompt_skip_or_retry", return_value="retry"),
             patch("updater.cli.play_error_sound"),
@@ -338,14 +350,16 @@ class TestProcessModuleWithRetry:
             success, status = await process_module_with_retry(mock_module_path)
 
         assert success is True
-        assert status == "success"
+        assert status == "updated"
 
     @pytest.mark.asyncio
     async def test_skip_after_failure(self, mock_module_path):
         """Test user chooses to skip after failure."""
         with (
             patch(
-                "updater.cli.process_single_go_module", new_callable=AsyncMock, return_value=False
+                "updater.cli.process_single_go_module",
+                new_callable=AsyncMock,
+                return_value=(False, "failed"),
             ),
             patch("updater.cli.prompt_skip_or_retry", return_value="skip"),
             patch("updater.cli.play_error_sound"),
@@ -363,7 +377,7 @@ class TestProcessModuleWithRetry:
             patch(
                 "updater.cli.process_single_go_module",
                 new_callable=AsyncMock,
-                side_effect=[False, False, True],
+                side_effect=[(False, "failed"), (False, "failed"), (True, "updated")],
             ),
             patch("updater.cli.prompt_skip_or_retry", return_value="retry"),
             patch("updater.cli.play_error_sound"),
@@ -372,7 +386,7 @@ class TestProcessModuleWithRetry:
             success, status = await process_module_with_retry(mock_module_path)
 
         assert success is True
-        assert status == "success"
+        assert status == "updated"
 
 
 class TestMainAsync:
@@ -383,6 +397,9 @@ class TestMainAsync:
         """Test when no modules are found."""
         with (
             patch("sys.argv", ["update-deps", str(tmp_path)]),
+            patch(
+                "updater.cli.verify_claude_auth", new_callable=AsyncMock, return_value=(True, None)
+            ),
             patch("updater.cli.play_completion_sound"),
         ):
             exit_code = await main_async()
@@ -396,6 +413,9 @@ class TestMainAsync:
 
         with (
             patch("sys.argv", ["update-deps", str(nonexistent)]),
+            patch(
+                "updater.cli.verify_claude_auth", new_callable=AsyncMock, return_value=(True, None)
+            ),
             patch("updater.cli.play_completion_sound"),
         ):
             exit_code = await main_async()
@@ -407,13 +427,16 @@ class TestMainAsync:
         """Test successful processing of single module."""
         with (
             patch("sys.argv", ["update-deps", str(mock_module_path)]),
+            patch(
+                "updater.cli.verify_claude_auth", new_callable=AsyncMock, return_value=(True, None)
+            ),
             patch("updater.cli.find_git_repo", return_value=mock_module_path.parent),
             patch("updater.cli.update_git_branch", return_value=True),
             patch("updater.cli.check_git_status", return_value=(0, [])),
             patch(
                 "updater.cli.process_module_with_retry",
                 new_callable=AsyncMock,
-                return_value=(True, "success"),
+                return_value=(True, "updated"),
             ),
             patch("updater.cli.play_completion_sound"),
             patch("builtins.print"),
@@ -427,6 +450,9 @@ class TestMainAsync:
         """Test failed processing of single module."""
         with (
             patch("sys.argv", ["update-deps", str(mock_module_path)]),
+            patch(
+                "updater.cli.verify_claude_auth", new_callable=AsyncMock, return_value=(True, None)
+            ),
             patch("updater.cli.find_git_repo", return_value=mock_module_path.parent),
             patch("updater.cli.update_git_branch", return_value=True),
             patch("updater.cli.check_git_status", return_value=(0, [])),
@@ -450,7 +476,9 @@ class TestMainAsync:
             patch("updater.cli.find_git_repo", return_value=mock_module_path.parent),
             patch("updater.cli.update_git_branch", return_value=False),
             patch("updater.cli.check_git_status", return_value=(0, [])),
-            patch("updater.cli.verify_claude_auth", new_callable=AsyncMock, return_value=(True, None)),
+            patch(
+                "updater.cli.verify_claude_auth", new_callable=AsyncMock, return_value=(True, None)
+            ),
             patch("updater.cli.play_completion_sound"),
             patch("updater.cli.play_error_sound"),
             patch("builtins.print"),
@@ -464,6 +492,9 @@ class TestMainAsync:
         """Test aborting when uncommitted changes detected."""
         with (
             patch("sys.argv", ["update-deps", str(mock_module_path)]),
+            patch(
+                "updater.cli.verify_claude_auth", new_callable=AsyncMock, return_value=(True, None)
+            ),
             patch("updater.cli.find_git_repo", return_value=mock_module_path.parent),
             patch("updater.cli.update_git_branch", return_value=True),
             patch("updater.cli.check_git_status", return_value=(2, ["go.mod", "go.sum"])),
@@ -480,6 +511,9 @@ class TestMainAsync:
         """Test continuing when uncommitted changes detected."""
         with (
             patch("sys.argv", ["update-deps", str(mock_module_path)]),
+            patch(
+                "updater.cli.verify_claude_auth", new_callable=AsyncMock, return_value=(True, None)
+            ),
             patch("updater.cli.find_git_repo", return_value=mock_module_path.parent),
             patch("updater.cli.update_git_branch", return_value=True),
             patch("updater.cli.check_git_status", return_value=(2, ["go.mod", "go.sum"])),
@@ -487,7 +521,7 @@ class TestMainAsync:
             patch(
                 "updater.cli.process_module_with_retry",
                 new_callable=AsyncMock,
-                return_value=(True, "success"),
+                return_value=(True, "updated"),
             ),
             patch("updater.cli.play_completion_sound"),
             patch("builtins.print"),
@@ -510,13 +544,16 @@ class TestMainAsync:
 
         with (
             patch("sys.argv", ["update-deps", str(mod1), str(mod2)]),
+            patch(
+                "updater.cli.verify_claude_auth", new_callable=AsyncMock, return_value=(True, None)
+            ),
             patch("updater.cli.find_git_repo", return_value=tmp_path),
             patch("updater.cli.update_git_branch", return_value=True),
             patch("updater.cli.check_git_status", return_value=(0, [])),
             patch(
                 "updater.cli.process_module_with_retry",
                 new_callable=AsyncMock,
-                return_value=(True, "success"),
+                return_value=(True, "updated"),
             ),
             patch("updater.cli.play_completion_sound"),
             patch("builtins.print"),
@@ -530,13 +567,16 @@ class TestMainAsync:
         """Test verbose mode sets config correctly."""
         with (
             patch("sys.argv", ["update-deps", str(mock_module_path), "--verbose"]),
+            patch(
+                "updater.cli.verify_claude_auth", new_callable=AsyncMock, return_value=(True, None)
+            ),
             patch("updater.cli.find_git_repo", return_value=mock_module_path.parent),
             patch("updater.cli.update_git_branch", return_value=True),
             patch("updater.cli.check_git_status", return_value=(0, [])),
             patch(
                 "updater.cli.process_module_with_retry",
                 new_callable=AsyncMock,
-                return_value=(True, "success"),
+                return_value=(True, "updated"),
             ),
             patch("updater.cli.play_completion_sound"),
             patch("builtins.print"),
@@ -554,11 +594,13 @@ class TestMainAsync:
             patch("updater.cli.find_git_repo", return_value=mock_module_path.parent),
             patch("updater.cli.update_git_branch", return_value=True),
             patch("updater.cli.check_git_status", return_value=(0, [])),
-            patch("updater.cli.verify_claude_auth", new_callable=AsyncMock, return_value=(True, None)),
+            patch(
+                "updater.cli.verify_claude_auth", new_callable=AsyncMock, return_value=(True, None)
+            ),
             patch(
                 "updater.cli.process_module_with_retry",
                 new_callable=AsyncMock,
-                return_value=(True, "success"),
+                return_value=(True, "updated"),
             ),
             patch("updater.cli.play_completion_sound"),
             patch("updater.cli.play_error_sound"),
@@ -574,13 +616,16 @@ class TestMainAsync:
         """Test require-commit-confirm flag."""
         with (
             patch("sys.argv", ["update-deps", str(mock_module_path), "--require-commit-confirm"]),
+            patch(
+                "updater.cli.verify_claude_auth", new_callable=AsyncMock, return_value=(True, None)
+            ),
             patch("updater.cli.find_git_repo", return_value=mock_module_path.parent),
             patch("updater.cli.update_git_branch", return_value=True),
             patch("updater.cli.check_git_status", return_value=(0, [])),
             patch(
                 "updater.cli.process_module_with_retry",
                 new_callable=AsyncMock,
-                return_value=(True, "success"),
+                return_value=(True, "updated"),
             ),
             patch("updater.cli.play_completion_sound"),
             patch("builtins.print"),
@@ -609,13 +654,16 @@ class TestMainAsync:
 
         with (
             patch("sys.argv", ["update-deps", str(parent)]),
+            patch(
+                "updater.cli.verify_claude_auth", new_callable=AsyncMock, return_value=(True, None)
+            ),
             patch("updater.cli.find_git_repo", return_value=tmp_path),
             patch("updater.cli.update_git_branch", return_value=True),
             patch("updater.cli.check_git_status", return_value=(0, [])),
             patch(
                 "updater.cli.process_module_with_retry",
                 new_callable=AsyncMock,
-                return_value=(True, "success"),
+                return_value=(True, "updated"),
             ),
             patch("updater.cli.play_completion_sound"),
             patch("builtins.print"),
