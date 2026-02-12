@@ -2,7 +2,12 @@
 
 import pytest
 
-from updater.module_discovery import _module_sort_key, discover_go_modules
+from updater.module_discovery import (
+    _module_sort_key,
+    discover_docker_projects,
+    discover_go_modules,
+    discover_legacy_python_projects,
+)
 
 
 @pytest.fixture
@@ -384,3 +389,166 @@ class TestDiscoverGoModules:
         assert names[1] == "lib/z"
         assert names[2] == "service1"
         assert names[3] == "service2"
+
+
+class TestDiscoverDockerProjects:
+    """Tests for discover_docker_projects function."""
+
+    def test_finds_standalone_dockerfile(self, tmp_path):
+        """Test discovery of standalone Dockerfile (no go.mod/pyproject.toml)."""
+        docker_proj = tmp_path / "docker-app"
+        docker_proj.mkdir()
+        (docker_proj / "Dockerfile").write_text("FROM golang:1.26.0\n")
+
+        projects = discover_docker_projects(tmp_path, recursive=True)
+
+        assert len(projects) == 1
+        assert docker_proj in projects
+
+    def test_skips_go_module_dockerfile(self, tmp_path):
+        """Test that Dockerfiles in Go modules are skipped."""
+        go_mod = tmp_path / "go-service"
+        go_mod.mkdir()
+        (go_mod / "go.mod").write_text("module go-service\n")
+        (go_mod / "Dockerfile").write_text("FROM golang:1.26.0\n")
+
+        projects = discover_docker_projects(tmp_path, recursive=True)
+
+        assert len(projects) == 0
+
+    def test_skips_python_module_dockerfile(self, tmp_path):
+        """Test that Dockerfiles in Python modules are skipped."""
+        py_mod = tmp_path / "py-service"
+        py_mod.mkdir()
+        (py_mod / "pyproject.toml").write_text("[project]\nname = 'py-service'\n")
+        (py_mod / "Dockerfile").write_text("FROM python:3.12\n")
+
+        projects = discover_docker_projects(tmp_path, recursive=True)
+
+        assert len(projects) == 0
+
+    def test_skips_vendor_directories(self, tmp_path):
+        """Test that Dockerfiles in vendor/ are skipped."""
+        vendor_docker = tmp_path / "vendor" / "some-tool"
+        vendor_docker.mkdir(parents=True)
+        (vendor_docker / "Dockerfile").write_text("FROM alpine:3.20\n")
+
+        projects = discover_docker_projects(tmp_path, recursive=True)
+
+        assert len(projects) == 0
+
+    def test_skips_node_modules_directories(self, tmp_path):
+        """Test that Dockerfiles in node_modules/ are skipped."""
+        node_docker = tmp_path / "node_modules" / "some-package"
+        node_docker.mkdir(parents=True)
+        (node_docker / "Dockerfile").write_text("FROM node:20\n")
+
+        projects = discover_docker_projects(tmp_path, recursive=True)
+
+        assert len(projects) == 0
+
+    def test_skips_venv_directories(self, tmp_path):
+        """Test that Dockerfiles in .venv/ are skipped."""
+        venv_docker = tmp_path / ".venv" / "something"
+        venv_docker.mkdir(parents=True)
+        (venv_docker / "Dockerfile").write_text("FROM python:3.12\n")
+
+        projects = discover_docker_projects(tmp_path, recursive=True)
+
+        assert len(projects) == 0
+
+    def test_finds_multiple_standalone_dockerfiles(self, tmp_path):
+        """Test discovery of multiple standalone Dockerfiles."""
+        app1 = tmp_path / "app1"
+        app1.mkdir()
+        (app1 / "Dockerfile").write_text("FROM alpine:3.20\n")
+
+        app2 = tmp_path / "app2"
+        app2.mkdir()
+        (app2 / "Dockerfile").write_text("FROM nginx:latest\n")
+
+        projects = discover_docker_projects(tmp_path, recursive=True)
+
+        assert len(projects) == 2
+        assert app1 in projects
+        assert app2 in projects
+
+    def test_non_recursive_finds_only_direct_children(self, tmp_path):
+        """Test non-recursive mode finds only direct children."""
+        direct = tmp_path / "direct"
+        direct.mkdir()
+        (direct / "Dockerfile").write_text("FROM alpine:3.20\n")
+
+        nested = tmp_path / "parent" / "nested"
+        nested.mkdir(parents=True)
+        (nested / "Dockerfile").write_text("FROM alpine:3.20\n")
+
+        projects = discover_docker_projects(tmp_path, recursive=False)
+
+        assert len(projects) == 1
+        assert direct in projects
+        assert nested not in projects
+
+    def test_sorted_alphabetically(self, tmp_path):
+        """Test that results are sorted alphabetically."""
+        z = tmp_path / "z-app"
+        z.mkdir()
+        (z / "Dockerfile").write_text("FROM alpine:3.20\n")
+
+        a = tmp_path / "a-app"
+        a.mkdir()
+        (a / "Dockerfile").write_text("FROM alpine:3.20\n")
+
+        m = tmp_path / "m-app"
+        m.mkdir()
+        (m / "Dockerfile").write_text("FROM alpine:3.20\n")
+
+        projects = discover_docker_projects(tmp_path, recursive=True)
+
+        names = [p.name for p in projects]
+        assert names == ["a-app", "m-app", "z-app"]
+
+
+class TestDiscoverLegacyPythonProjects:
+    """Tests for vendor/node_modules filtering in legacy Python discovery."""
+
+    def test_skips_vendor_directories(self, tmp_path):
+        """Test that legacy Python projects in vendor/ are skipped."""
+        vendor_proj = tmp_path / "vendor" / "go.opentelemetry.io" / "otel"
+        vendor_proj.mkdir(parents=True)
+        (vendor_proj / "requirements.txt").write_text("requests\n")
+
+        projects = discover_legacy_python_projects(tmp_path, recursive=True)
+
+        assert len(projects) == 0
+
+    def test_skips_node_modules_directories(self, tmp_path):
+        """Test that legacy Python projects in node_modules/ are skipped."""
+        node_proj = tmp_path / "node_modules" / "some-package"
+        node_proj.mkdir(parents=True)
+        (node_proj / "requirements.txt").write_text("requests\n")
+
+        projects = discover_legacy_python_projects(tmp_path, recursive=True)
+
+        assert len(projects) == 0
+
+    def test_finds_legitimate_legacy_project(self, tmp_path):
+        """Test that legitimate legacy Python projects are found."""
+        legacy = tmp_path / "legacy-app"
+        legacy.mkdir()
+        (legacy / "requirements.txt").write_text("requests\n")
+
+        projects = discover_legacy_python_projects(tmp_path, recursive=True)
+
+        assert len(projects) == 1
+        assert legacy in projects
+
+    def test_skips_vendor_in_setup_py_search(self, tmp_path):
+        """Test that setup.py in vendor/ is skipped."""
+        vendor_proj = tmp_path / "vendor" / "some-lib"
+        vendor_proj.mkdir(parents=True)
+        (vendor_proj / "setup.py").write_text("from setuptools import setup\n")
+
+        projects = discover_legacy_python_projects(tmp_path, recursive=True)
+
+        assert len(projects) == 0
