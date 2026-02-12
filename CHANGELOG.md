@@ -8,6 +8,12 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## v0.8.0
+- Add Docker project support to update-all command with auto-commit
+- Optimize module discovery performance (skip vendor/node_modules during walk)
+- Add k8s.io v0.34.4 and v0.35.1 to dependency excludes
+- Add comprehensive tests for Docker discovery and vendor filtering
+
 ## v0.7.1
 - Make ~/.claude-clean config optional (only use if pre-created by user)
 - Add retry with exponential backoff for Claude SDK timeout errors

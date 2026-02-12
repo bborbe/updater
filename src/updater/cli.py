@@ -455,14 +455,19 @@ async def process_module_with_retry(
                     if len(updates) == 1:
                         commit_msg = f"Update Dockerfile: {updates[0]}"
                     else:
-                        commit_msg = f"Update Dockerfile images\n\n" + "\n".join(f"- {u}" for u in updates)
+                        commit_msg = "Update Dockerfile images\n\n" + "\n".join(
+                            f"- {u}" for u in updates
+                        )
 
                     # Commit changes
                     log_message("\n=== Committing Changes ===", to_console=True)
                     git_commit(module_path, commit_msg, log_func=log_message)
                     log_message("\n✓ Dockerfile updated and committed", to_console=True)
                 else:
-                    log_message("\n✓ Dockerfile updated (already matches committed version)", to_console=True)
+                    log_message(
+                        "\n✓ Dockerfile updated (already matches committed version)",
+                        to_console=True,
+                    )
             else:
                 log_message("\n✓ Dockerfile already up to date", to_console=True)
 
