@@ -450,7 +450,9 @@ class TestMainAsync:
             patch("updater.cli.find_git_repo", return_value=mock_module_path.parent),
             patch("updater.cli.update_git_branch", return_value=False),
             patch("updater.cli.check_git_status", return_value=(0, [])),
+            patch("updater.cli.verify_claude_auth", new_callable=AsyncMock, return_value=(True, None)),
             patch("updater.cli.play_completion_sound"),
+            patch("updater.cli.play_error_sound"),
             patch("builtins.print"),
         ):
             exit_code = await main_async()
@@ -552,12 +554,14 @@ class TestMainAsync:
             patch("updater.cli.find_git_repo", return_value=mock_module_path.parent),
             patch("updater.cli.update_git_branch", return_value=True),
             patch("updater.cli.check_git_status", return_value=(0, [])),
+            patch("updater.cli.verify_claude_auth", new_callable=AsyncMock, return_value=(True, None)),
             patch(
                 "updater.cli.process_module_with_retry",
                 new_callable=AsyncMock,
                 return_value=(True, "success"),
             ),
             patch("updater.cli.play_completion_sound"),
+            patch("updater.cli.play_error_sound"),
             patch("builtins.print"),
         ):
             exit_code = await main_async()

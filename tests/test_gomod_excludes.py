@@ -169,27 +169,37 @@ exclude (
     k8s.io/api v0.34.1
     k8s.io/api v0.34.2
     k8s.io/api v0.34.3
+    k8s.io/api v0.34.4
+    k8s.io/api v0.35.0
+    k8s.io/api v0.35.1
     k8s.io/client-go v0.34.0
     k8s.io/client-go v0.34.1
     k8s.io/client-go v0.34.2
     k8s.io/client-go v0.34.3
+    k8s.io/client-go v0.34.4
+    k8s.io/client-go v0.35.0
+    k8s.io/client-go v0.35.1
     k8s.io/code-generator v0.34.0
     k8s.io/code-generator v0.34.1
     k8s.io/code-generator v0.34.2
     k8s.io/code-generator v0.34.3
-    k8s.io/api v0.35.0
-    k8s.io/apiextensions-apiserver v0.35.0
-    k8s.io/apimachinery v0.35.0
-    k8s.io/client-go v0.35.0
+    k8s.io/code-generator v0.34.4
     k8s.io/code-generator v0.35.0
+    k8s.io/code-generator v0.35.1
     k8s.io/apiextensions-apiserver v0.34.0
     k8s.io/apiextensions-apiserver v0.34.1
     k8s.io/apiextensions-apiserver v0.34.2
     k8s.io/apiextensions-apiserver v0.34.3
+    k8s.io/apiextensions-apiserver v0.34.4
+    k8s.io/apiextensions-apiserver v0.35.0
+    k8s.io/apiextensions-apiserver v0.35.1
     k8s.io/apimachinery v0.34.0
     k8s.io/apimachinery v0.34.1
     k8s.io/apimachinery v0.34.2
     k8s.io/apimachinery v0.34.3
+    k8s.io/apimachinery v0.34.4
+    k8s.io/apimachinery v0.35.0
+    k8s.io/apimachinery v0.35.1
     github.com/go-logr/glogr v1.0.0-rc1
     github.com/go-logr/glogr v1.0.0
     github.com/go-logr/logr v1.0.0-rc1
