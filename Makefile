@@ -20,7 +20,7 @@ sync:
 	@uv sync --all-extras
 
 .PHONY: test
-test:
+test: sync
 	uv run pytest
 
 .PHONY: test-verbose
