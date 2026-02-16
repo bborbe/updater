@@ -104,6 +104,7 @@ Skip or Retry? [s/R]:
 | `update-go-with-deps` | Go versions and dependencies (explicit name) |
 | `update-python` | Python projects only (requires `pyproject.toml` + `uv.lock`) |
 | `update-docker` | Dockerfile base images only (no commit) |
+| `release-only` | Release unreleased CHANGELOG entries (version bump, commit, tag, push) |
 
 ## Features
 

@@ -8,6 +8,71 @@ from typing import Any
 from .exceptions import ChangelogError
 
 
+def get_unreleased_entries(changelog_path: Path) -> list[str] | None:
+    """Parse CHANGELOG.md and return bullet points under ## Unreleased.
+
+    Args:
+        changelog_path: Path to CHANGELOG.md
+
+    Returns:
+        List of bullet point strings, or None if no Unreleased section or empty
+    """
+    if not changelog_path.exists():
+        return None
+
+    with open(changelog_path) as f:
+        lines = f.readlines()
+
+    # Find ## Unreleased section
+    unreleased_idx = None
+    for i, line in enumerate(lines):
+        if line.strip() == "## Unreleased":
+            unreleased_idx = i
+            break
+
+    if unreleased_idx is None:
+        return None
+
+    # Collect bullet points until next ## section or end of file
+    entries: list[str] = []
+    for line in lines[unreleased_idx + 1 :]:
+        stripped = line.strip()
+        if stripped.startswith("## "):
+            break
+        if stripped.startswith("- "):
+            entries.append(stripped)
+
+    return entries if entries else None
+
+
+def promote_unreleased_to_version(changelog_path: Path, new_version: str) -> None:
+    """Replace ## Unreleased header with a versioned header.
+
+    Replaces the `## Unreleased` line with `## {new_version}`, keeping
+    all the bullet points in place.
+
+    Args:
+        changelog_path: Path to CHANGELOG.md
+        new_version: Version string (e.g., "v1.7.0")
+
+    Raises:
+        ChangelogError: If CHANGELOG.md not found or no Unreleased section
+    """
+    if not changelog_path.exists():
+        raise ChangelogError(f"CHANGELOG.md not found at {changelog_path}")
+
+    with open(changelog_path) as f:
+        content = f.read()
+
+    if "## Unreleased" not in content:
+        raise ChangelogError("No ## Unreleased section found in CHANGELOG.md")
+
+    content = content.replace("## Unreleased", f"## {new_version}", 1)
+
+    with open(changelog_path, "w") as f:
+        f.write(content)
+
+
 def extract_current_version(changelog_path: Path) -> tuple[int, int, int]:
     """Extract current version from CHANGELOG.md.
 

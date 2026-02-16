@@ -7,8 +7,18 @@ from datetime import datetime
 from pathlib import Path
 
 from . import config
-from .changelog import add_to_unreleased, update_changelog_with_suggestions
-from .claude_analyzer import analyze_changes_with_claude, verify_claude_auth
+from .changelog import (
+    add_to_unreleased,
+    extract_current_version,
+    get_unreleased_entries,
+    promote_unreleased_to_version,
+    update_changelog_with_suggestions,
+)
+from .claude_analyzer import (
+    analyze_changes_with_claude,
+    analyze_unreleased_for_release,
+    verify_claude_auth,
+)
 from .docker_updater import update_dockerfile_images
 from .file_utils import condense_file_list
 from .git_operations import (
@@ -17,6 +27,7 @@ from .git_operations import (
     ensure_gitignore_entry,
     find_git_repo,
     git_commit,
+    git_push,
     git_tag_from_changelog,
     update_git_branch,
 )
@@ -1216,3 +1227,275 @@ async def main_docker_async() -> int:
 def main_docker() -> int:
     """Docker-only entry point."""
     return asyncio.run(main_docker_async())
+
+
+async def process_release_module(module_path: Path) -> tuple[bool, str]:
+    """Process a single module for release-only workflow.
+
+    Scans CHANGELOG.md for unreleased entries, uses Claude to determine
+    version bump, promotes unreleased to versioned section, commits, tags, and pushes.
+
+    Args:
+        module_path: Path to the module
+
+    Returns:
+        Tuple of (success: bool, status: str)
+        status can be: 'released', 'nothing-to-release', 'skipped', 'failed'
+    """
+    from .changelog import bump_version
+
+    log_file = None
+    try:
+        log_file = setup_module_logging(module_path)
+
+        log_message(f"\n{'=' * 70}", to_console=True)
+        log_message(f"Release: {module_path.name}", to_console=True)
+        log_message("=" * 70, to_console=True)
+        if log_file and not config.VERBOSE_MODE:
+            print(f"  Log: {log_file}")
+
+        # Find git repo
+        git_repo = find_git_repo(module_path)
+        if not git_repo:
+            log_message("✗ No git repository found", to_console=True)
+            return (False, "failed")
+
+        # Check for CHANGELOG.md
+        changelog_path = module_path / "CHANGELOG.md"
+        if not changelog_path.exists():
+            log_message("Nothing to release (no CHANGELOG.md)", to_console=True)
+            return (True, "nothing-to-release")
+
+        # Get unreleased entries
+        entries = get_unreleased_entries(changelog_path)
+        if entries is None:
+            log_message("Nothing to release", to_console=True)
+            return (True, "nothing-to-release")
+
+        log_message(f"\n→ Found {len(entries)} unreleased entries:", to_console=True)
+        for entry in entries:
+            log_message(f"  {entry}", to_console=True)
+
+        # Analyze with Claude
+        analysis = await analyze_unreleased_for_release(
+            entries, module_path.name, log_func=log_message
+        )
+
+        # Calculate new version
+        major, minor, patch = extract_current_version(changelog_path)
+        new_version = bump_version(major, minor, patch, analysis["version_bump"])
+        old_version = f"v{major}.{minor}.{patch}"
+
+        log_message(f"\n  Current version: {old_version}", to_console=True)
+        log_message(f"  Version bump: {analysis['version_bump']}", to_console=True)
+        log_message(f"  New version: {new_version}", to_console=True)
+
+        # Show summary and ask for confirmation
+        print("\n" + "=" * 60)
+        print(f"READY TO RELEASE: {module_path.name}")
+        print("=" * 60)
+        print(f"Version:        {old_version} → {new_version} ({analysis['version_bump']} bump)")
+        print(f"Commit message: Release {new_version}")
+        print(f"Git tag:        {new_version}")
+        print("\nUnreleased entries:")
+        for entry in entries:
+            print(f"  {entry}")
+        print("=" * 60)
+
+        if config.REQUIRE_CONFIRM:
+            if not prompt_yes_no("\nProceed with release?", default_yes=True):
+                log_message("\n⚠ Skipped by user", to_console=True)
+                return (True, "skipped")
+
+        # Promote unreleased to version
+        promote_unreleased_to_version(changelog_path, new_version)
+        log_message(f"\n✓ CHANGELOG updated: ## Unreleased → ## {new_version}", to_console=True)
+
+        # Commit
+        commit_message = f"Release {new_version}"
+        git_commit(module_path, commit_message, log_func=log_message)
+
+        # Tag
+        git_tag_from_changelog(module_path, log_func=log_message)
+
+        # Push
+        git_push(module_path, log_func=log_message)
+
+        log_message(f"\n✓ Released {new_version} successfully!", to_console=True)
+        return (True, "released")
+
+    except Exception as e:
+        log_message(f"\n✗ Error processing {module_path}: {e}", to_console=True)
+        if config.VERBOSE_MODE:
+            traceback.print_exc()
+        return (False, "failed")
+    finally:
+        close_module_logging()
+        cleanup_old_logs(module_path)
+
+
+async def process_release_with_retry(module_path: Path) -> tuple[bool, str]:
+    """Process a release module with retry on failure.
+
+    Args:
+        module_path: Path to the module
+
+    Returns:
+        Tuple of (success: bool, status: str)
+    """
+    attempt = 1
+
+    while True:
+        if attempt > 1:
+            print(f"\n=== Retrying {module_path} (attempt {attempt}) ===\n")
+
+        success, status = await process_release_module(module_path)
+
+        if success:
+            return True, status
+
+        play_error_sound()
+        print(f"\n✗ Release failed for {module_path}")
+        print("  → Fix the issues and retry, or skip this module")
+
+        choice = prompt_skip_or_retry()
+
+        if choice == "skip":
+            print(f"⚠ Skipping {module_path}\n")
+            return False, "skipped"
+
+        attempt += 1
+
+
+async def main_release_async() -> int:
+    """Release-only async workflow.
+
+    Scans CHANGELOG.md for unreleased entries, determines version bump,
+    promotes unreleased to versioned section, commits, tags, and pushes.
+
+    Returns:
+        Exit code (0 for success, 1 for error)
+    """
+    parser = argparse.ArgumentParser(
+        description="Release unreleased CHANGELOG entries (version bump, commit, tag, push)"
+    )
+    parser.add_argument(
+        "modules",
+        nargs="*",
+        default=["."],
+        help="Path(s) to module(s) or parent directories (default: current directory)",
+    )
+    parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="Show full command output",
+    )
+    parser.add_argument(
+        "--model",
+        choices=["sonnet", "opus", "haiku"],
+        default="sonnet",
+        help="Claude model to use (default: sonnet)",
+    )
+    parser.add_argument(
+        "--require-commit-confirm",
+        action="store_true",
+        help="Require user confirmation before releasing",
+    )
+
+    args = parser.parse_args()
+
+    config.VERBOSE_MODE = args.verbose
+    config.MODEL = args.model
+    config.REQUIRE_CONFIRM = args.require_commit_confirm
+    config.RUN_TIMESTAMP = datetime.now().strftime("%Y-%m-%d-%H%M%S")
+
+    # Step 0: Verify Claude authentication
+    print("=== Step 0: Verify Claude Authentication ===\n")
+    auth_ok, auth_error = await verify_claude_auth()
+    if not auth_ok:
+        print(f"✗ {auth_error}")
+        play_completion_sound()
+        return 1
+    print("✓ Claude authentication verified\n")
+
+    # Resolve module paths
+    print("=== Step 1: Discover Modules ===\n")
+
+    module_paths: list[Path] = []
+    for path_str in args.modules:
+        path = Path(path_str).resolve()
+        if not path.exists():
+            print(f"✗ Module path does not exist: {path}")
+            play_completion_sound()
+            return 1
+
+        # Check if this path has a CHANGELOG.md directly
+        if (path / "CHANGELOG.md").exists():
+            module_paths.append(path)
+        else:
+            # Discover all modules recursively
+            discovered = discover_all_modules(path, recursive=True)
+            for mod_list in discovered.values():
+                for mod in mod_list:
+                    if (mod / "CHANGELOG.md").exists():
+                        module_paths.append(mod)
+
+    # Remove duplicates
+    module_paths = list(dict.fromkeys(module_paths))
+
+    if not module_paths:
+        print("✗ No modules with CHANGELOG.md found")
+        play_completion_sound()
+        return 1
+
+    print(f"Found {len(module_paths)} module(s) with CHANGELOG.md\n")
+    for mod in module_paths:
+        print(f"  - {mod}")
+    print()
+
+    # Process each module
+    results = []
+    for i, mod in enumerate(module_paths, 1):
+        if len(module_paths) > 1:
+            print(f"\n[{i}/{len(module_paths)}] {mod.name}")
+
+        success, status = await process_release_with_retry(mod)
+        results.append((mod, success, status))
+
+    # Summary
+    if len(module_paths) > 1:
+        print("\n" + "=" * 70)
+        print(f"SUMMARY: {len(module_paths)} module(s)")
+        print("=" * 70)
+
+        released = [mod for mod, _, status in results if status == "released"]
+        nothing = [mod for mod, _, status in results if status == "nothing-to-release"]
+        skipped = [mod for mod, _, status in results if status == "skipped"]
+        failed = [mod for mod, _, status in results if status == "failed"]
+
+        if released:
+            print(f"\n✓ Released: {len(released)}")
+            for mod in released:
+                print(f"  - {mod.name}")
+        if nothing:
+            print(f"\n✓ Nothing to release: {len(nothing)}")
+            for mod in nothing:
+                print(f"  - {mod.name}")
+        if skipped:
+            print(f"\n⚠ Skipped: {len(skipped)}")
+            for mod in skipped:
+                print(f"  - {mod.name}")
+        if failed:
+            print(f"\n✗ Failed: {len(failed)}")
+            for mod in failed:
+                print(f"  - {mod.name}")
+
+        print("\n" + "=" * 70)
+
+    play_completion_sound()
+    return 0
+
+
+def main_release() -> int:
+    """Release-only entry point."""
+    return asyncio.run(main_release_async())

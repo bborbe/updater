@@ -34,6 +34,7 @@ update-go-only = "updater.cli:main_go_only"
 update-go-with-deps = "updater.cli:main_go_with_deps"
 update-python = "updater.cli:main_python"
 update-docker = "updater.cli:main_docker"
+release-only = "updater.cli:main_release"
 
 [tool.uv]
 package = true
