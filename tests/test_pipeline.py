@@ -188,6 +188,10 @@ async def test_release_step_with_unreleased_entries(tmp_path):
     )
 
     with (
+        patch("updater.git_operations.get_latest_tag", return_value="v1.0.0"),
+        patch("updater.git_operations.get_commits_since_tag", return_value=[
+            {"hash": "abc123", "subject": "New feature", "body": ""}
+        ]),
         patch("updater.pipeline.log_message"),
         patch("updater.pipeline.config") as mock_config,
         patch(
@@ -254,3 +258,39 @@ async def test_docker_commit_step_with_changes(tmp_path):
         assert result.status == StepStatus.SUCCESS
         mock_commit.assert_called_once()
         assert "nginx:1.25→1.26" in mock_commit.call_args[0][1]
+
+
+# ---------------------------------------------------------------------------
+# ReleaseStep - missing tag detection
+# ---------------------------------------------------------------------------
+
+
+async def test_release_step_detects_missing_tag(tmp_path):
+    """Test ReleaseStep detects when CHANGELOG version has no corresponding tag."""
+    # Create CHANGELOG with v0.5.2 but no ## Unreleased
+    changelog = tmp_path / "CHANGELOG.md"
+    changelog.write_text("""# Changelog
+
+## v0.5.2
+- Some feature
+
+## v0.5.1
+- Previous feature
+""")
+
+    with (
+        patch("updater.git_operations.get_latest_tag", return_value="v0.5.1"),
+        patch("updater.git_operations.get_commits_since_tag", return_value=[
+            {"hash": "abc123", "subject": "Add feature", "body": ""}
+        ]),
+        patch("updater.changelog.get_unreleased_entries", return_value=None),
+        patch("updater.pipeline.log_message"),
+    ):
+        step = ReleaseStep()
+        ctx = {}
+        result = await step.run(tmp_path, ctx)
+
+        assert result.status == StepStatus.SUCCESS
+        assert ctx["new_version"] == "v0.5.2"
+        assert ctx["tag_only"] is True
+        assert ctx["commit_message"] == "Release v0.5.2"

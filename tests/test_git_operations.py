@@ -242,3 +242,13 @@ def test_get_commits_since_tag_no_tag(tmp_path):
 
         assert len(result) == 1
         assert result[0]["subject"] == "Initial commit"
+
+
+def test_get_latest_tag_with_v_prefix(tmp_path):
+    """Test get_latest_tag handles v prefix correctly."""
+    with patch("subprocess.run") as mock_run:
+        mock_run.return_value = Mock(returncode=0, stdout="v1.2.3\n")
+
+        result = get_latest_tag(tmp_path)
+
+        assert result == "v1.2.3"

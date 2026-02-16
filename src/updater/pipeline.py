@@ -341,10 +341,13 @@ class GitCommitStep(Step):
     """Commit changes and optionally tag."""
 
     async def run(self, module_path: Path, context: dict[str, Any]) -> StepResult:
-        analysis = context.get("analysis", {})
-        commit_message = context.get("commit_message", analysis.get("commit_message", "Update"))
+        tag_only = context.get("tag_only", False)
 
-        git_commit(module_path, commit_message, log_func=log_message)
+        if not tag_only:
+            # Normal flow: commit changes
+            analysis = context.get("analysis", {})
+            commit_message = context.get("commit_message", analysis.get("commit_message", "Update"))
+            git_commit(module_path, commit_message, log_func=log_message)
 
         no_tag = context.get("no_tag", False)
 
@@ -353,7 +356,10 @@ class GitCommitStep(Step):
 
         if not no_tag and "new_version" in context:
             git_tag_from_changelog(module_path, log_func=log_message)
-            log_message("\n✓ Update completed successfully!", to_console=True)
+            if tag_only:
+                log_message("\n✓ Missing tag created successfully!", to_console=True)
+            else:
+                log_message("\n✓ Update completed successfully!", to_console=True)
         else:
             log_message("\n✓ Commit completed successfully!", to_console=True)
 
@@ -402,6 +408,17 @@ class ReleaseStep(Step):
         with open(changelog_path, "w") as f:
             f.write("\n".join(lines))
 
+    def _get_latest_changelog_version(self, changelog_path: Path) -> str | None:
+        """Get the latest version from CHANGELOG.md (first ## vX.Y.Z section)."""
+        import re
+
+        with open(changelog_path) as f:
+            content = f.read()
+
+        # Find first version section (skip ## Unreleased if present)
+        match = re.search(r"##\s+(v\d+\.\d+\.\d+)", content)
+        return match.group(1) if match else None
+
     async def run(self, module_path: Path, context: dict[str, Any]) -> StepResult:
         from .claude_analyzer import generate_changelog_from_commits
         from .git_operations import get_commits_since_tag, get_latest_tag
@@ -432,7 +449,23 @@ class ReleaseStep(Step):
         entries = get_unreleased_entries(changelog_path)
 
         if entries is None:
-            # No ## Unreleased section - generate from commits
+            # No ## Unreleased section - check if latest CHANGELOG version is missing a tag
+            changelog_version = self._get_latest_changelog_version(changelog_path)
+
+            if changelog_version and changelog_version != latest_tag:
+                # CHANGELOG has a version that's not tagged - just tag it
+                log_message(
+                    f"\n→ CHANGELOG has {changelog_version} but tag doesn't exist",
+                    to_console=True,
+                )
+                log_message("→ Creating missing tag...", to_console=True)
+
+                context["new_version"] = changelog_version
+                context["commit_message"] = f"Release {changelog_version}"
+                context["tag_only"] = True  # Signal that we only need to tag, no commit
+                return StepResult(StepStatus.SUCCESS)
+
+            # No version mismatch - generate from commits
             log_message("\n⚠ No ## Unreleased section found", to_console=True)
             log_message("→ Generating changelog entries from commits...", to_console=True)
 

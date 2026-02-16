@@ -13,6 +13,7 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 - Auto-generate changelog entries from git commits when ## Unreleased is missing
 - Check commits since last tag to detect unreleased changes
 - Use Claude to create user-friendly changelog entries from commit messages
+- Detect and create missing tags when CHANGELOG version exists but tag doesn't
 
 ## v0.12.1
 
