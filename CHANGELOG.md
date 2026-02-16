@@ -8,6 +8,9 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## v0.12.0
+- Add universal CI workflow for automated testing
+
 ## v0.11.0
 - Change git update behavior to stay on current branch and merge origin/master (instead of forcing checkout master)
 - Add --no-tag flag to add changes to ## Unreleased instead of creating version/tag (useful for PR workflows)
