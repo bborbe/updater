@@ -8,7 +8,7 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
-## Unreleased
+## v0.12.1
 
 - Improve version bump prompt with clearer semver guidance
 - Add examples and keywords to help Claude distinguish minor vs patch changes
