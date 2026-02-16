@@ -2,7 +2,12 @@
 
 from unittest.mock import Mock, patch
 
-from updater.git_operations import check_git_status, git_push
+from updater.git_operations import (
+    check_git_status,
+    get_commits_since_tag,
+    get_latest_tag,
+    git_push,
+)
 
 
 def test_check_git_status_no_changes(tmp_path):
@@ -175,3 +180,75 @@ def test_git_push_calls_push_and_tags(tmp_path):
         calls = [c[0][0] for c in mock_run.call_args_list]
         assert "git push origin" in calls
         assert "git push origin --tags" in calls
+
+
+def test_get_latest_tag_returns_tag(tmp_path):
+    """Test get_latest_tag returns the latest git tag."""
+    with patch("subprocess.run") as mock_run:
+        mock_run.return_value = Mock(returncode=0, stdout="v1.9.3\n")
+
+        result = get_latest_tag(tmp_path)
+
+        assert result == "v1.9.3"
+
+
+def test_get_latest_tag_no_tags(tmp_path):
+    """Test get_latest_tag returns None when no tags exist."""
+    with patch("subprocess.run") as mock_run:
+        mock_run.return_value = Mock(returncode=0, stdout="\n")
+
+        result = get_latest_tag(tmp_path)
+
+        assert result is None
+
+
+def test_get_commits_since_tag_returns_commits(tmp_path):
+    """Test get_commits_since_tag returns list of commits."""
+    delimiter = "---COMMIT_DELIMITER---"
+    git_output = f"abc1234{delimiter}Add new feature{delimiter}Body text{delimiter}\ndef5678{delimiter}Fix bug{delimiter}{delimiter}\n"
+
+    with patch("subprocess.run") as mock_run:
+        mock_run.return_value = Mock(returncode=0, stdout=git_output)
+
+        result = get_commits_since_tag(tmp_path, "v1.0.0")
+
+        assert len(result) == 2
+        assert result[0]["hash"] == "abc1234"
+        assert result[0]["subject"] == "Add new feature"
+        assert result[0]["body"] == "Body text"
+        assert result[1]["hash"] == "def5678"
+        assert result[1]["subject"] == "Fix bug"
+
+
+def test_get_commits_since_tag_no_commits(tmp_path):
+    """Test get_commits_since_tag returns empty list when no commits."""
+    with patch("subprocess.run") as mock_run:
+        mock_run.return_value = Mock(returncode=0, stdout="")
+
+        result = get_commits_since_tag(tmp_path, "v1.0.0")
+
+        assert result == []
+
+
+def test_get_commits_since_tag_no_tag(tmp_path):
+    """Test get_commits_since_tag works with no tag (all commits)."""
+    delimiter = "---COMMIT_DELIMITER---"
+    git_output = f"abc1234{delimiter}Initial commit{delimiter}{delimiter}\n"
+
+    with patch("subprocess.run") as mock_run:
+        mock_run.return_value = Mock(returncode=0, stdout=git_output)
+
+        result = get_commits_since_tag(tmp_path, None)
+
+        assert len(result) == 1
+        assert result[0]["subject"] == "Initial commit"
+
+
+def test_get_latest_tag_with_v_prefix(tmp_path):
+    """Test get_latest_tag handles v prefix correctly."""
+    with patch("subprocess.run") as mock_run:
+        mock_run.return_value = Mock(returncode=0, stdout="v1.2.3\n")
+
+        result = get_latest_tag(tmp_path)
+
+        assert result == "v1.2.3"

@@ -7,7 +7,11 @@ from unittest.mock import AsyncMock, Mock, patch
 import pytest
 
 from updater import config
-from updater.claude_analyzer import analyze_changes_with_claude, verify_claude_auth
+from updater.claude_analyzer import (
+    analyze_changes_with_claude,
+    generate_changelog_from_commits,
+    verify_claude_auth,
+)
 from updater.exceptions import ClaudeError
 
 
@@ -441,3 +445,68 @@ class TestVerifyClaudeAuth:
         assert success is False
         assert "Claude check failed" in error
         assert "Network timeout" in error
+
+
+class TestGenerateChangelogFromCommits:
+    """Tests for generate_changelog_from_commits function."""
+
+    @pytest.mark.asyncio
+    async def test_successful_generation(self, reset_config):
+        """Test successful changelog generation from commits."""
+        commits = [
+            {"hash": "abc1234", "subject": "Add new feature", "body": ""},
+            {"hash": "def5678", "subject": "Fix bug in handler", "body": ""},
+        ]
+
+        response = json.dumps({
+            "entries": [
+                "Add new feature for users",
+                "Fix bug in HTTP handler",
+            ]
+        })
+
+        mock_client = create_mock_client(response)
+        mock_log = Mock()
+
+        with patch("updater.claude_analyzer.ClaudeSDKClient", return_value=mock_client):
+            result = await generate_changelog_from_commits(
+                commits, "test-module", log_func=mock_log
+            )
+
+        assert len(result) == 2
+        assert "Add new feature for users" in result
+        assert "Fix bug in HTTP handler" in result
+
+    @pytest.mark.asyncio
+    async def test_json_in_code_block(self, reset_config):
+        """Test parsing JSON wrapped in code block."""
+        commits = [{"hash": "abc", "subject": "Test", "body": ""}]
+
+        response = '```json\n{"entries": ["Test entry"]}\n```'
+
+        mock_client = create_mock_client(response)
+        mock_log = Mock()
+
+        with patch("updater.claude_analyzer.ClaudeSDKClient", return_value=mock_client):
+            result = await generate_changelog_from_commits(
+                commits, "test-module", log_func=mock_log
+            )
+
+        assert result == ["Test entry"]
+
+    @pytest.mark.asyncio
+    async def test_empty_entries(self, reset_config):
+        """Test handling empty entries response."""
+        commits = [{"hash": "abc", "subject": "Minor fix", "body": ""}]
+
+        response = json.dumps({"entries": []})
+
+        mock_client = create_mock_client(response)
+        mock_log = Mock()
+
+        with patch("updater.claude_analyzer.ClaudeSDKClient", return_value=mock_client):
+            result = await generate_changelog_from_commits(
+                commits, "test-module", log_func=mock_log
+            )
+
+        assert result == []

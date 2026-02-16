@@ -341,10 +341,13 @@ class GitCommitStep(Step):
     """Commit changes and optionally tag."""
 
     async def run(self, module_path: Path, context: dict[str, Any]) -> StepResult:
-        analysis = context.get("analysis", {})
-        commit_message = context.get("commit_message", analysis.get("commit_message", "Update"))
+        tag_only = context.get("tag_only", False)
 
-        git_commit(module_path, commit_message, log_func=log_message)
+        if not tag_only:
+            # Normal flow: commit changes
+            analysis = context.get("analysis", {})
+            commit_message = context.get("commit_message", analysis.get("commit_message", "Update"))
+            git_commit(module_path, commit_message, log_func=log_message)
 
         no_tag = context.get("no_tag", False)
 
@@ -353,7 +356,10 @@ class GitCommitStep(Step):
 
         if not no_tag and "new_version" in context:
             git_tag_from_changelog(module_path, log_func=log_message)
-            log_message("\n✓ Update completed successfully!", to_console=True)
+            if tag_only:
+                log_message("\n✓ Missing tag created successfully!", to_console=True)
+            else:
+                log_message("\n✓ Update completed successfully!", to_console=True)
         else:
             log_message("\n✓ Commit completed successfully!", to_console=True)
 
@@ -374,18 +380,107 @@ class GitPushStep(Step):
 
 
 class ReleaseStep(Step):
-    """Promote ## Unreleased to versioned section with tag."""
+    """Promote ## Unreleased to versioned section with tag.
+
+    If no ## Unreleased section exists but there are commits since the last tag,
+    generates changelog entries from commit messages using Claude.
+    """
+
+    def _add_unreleased_section(self, changelog_path: Path, entries: list[str]) -> None:
+        """Add ## Unreleased section with entries to changelog."""
+        with open(changelog_path) as f:
+            content = f.read()
+
+        # Find first version section
+        lines = content.split("\n")
+        insert_idx = 0
+        for i, line in enumerate(lines):
+            if line.startswith("## v"):
+                insert_idx = i
+                break
+
+        # Build new section
+        entries_text = "\n".join(entries)
+        new_section = f"## Unreleased\n\n{entries_text}\n"
+
+        lines.insert(insert_idx, new_section)
+
+        with open(changelog_path, "w") as f:
+            f.write("\n".join(lines))
+
+    def _get_latest_changelog_version(self, changelog_path: Path) -> str | None:
+        """Get the latest version from CHANGELOG.md (first ## vX.Y.Z section)."""
+        import re
+
+        with open(changelog_path) as f:
+            content = f.read()
+
+        # Find first version section (skip ## Unreleased if present)
+        match = re.search(r"##\s+(v\d+\.\d+\.\d+)", content)
+        return match.group(1) if match else None
 
     async def run(self, module_path: Path, context: dict[str, Any]) -> StepResult:
+        from .claude_analyzer import generate_changelog_from_commits
+        from .git_operations import get_commits_since_tag, get_latest_tag
+
         changelog_path = module_path / "CHANGELOG.md"
         if not changelog_path.exists():
             log_message("Nothing to release (no CHANGELOG.md)", to_console=True)
             return StepResult(StepStatus.UP_TO_DATE)
 
-        entries = get_unreleased_entries(changelog_path)
-        if entries is None:
-            log_message("Nothing to release", to_console=True)
+        # Check for commits since last tag
+        latest_tag = get_latest_tag(module_path)
+        commits = get_commits_since_tag(module_path, latest_tag)
+
+        if not commits:
+            log_message("Nothing to release (no commits since last tag)", to_console=True)
             return StepResult(StepStatus.UP_TO_DATE)
+
+        log_message(
+            f"\n→ Found {len(commits)} commits since {latest_tag or 'beginning'}:",
+            to_console=True,
+        )
+        for c in commits[:5]:  # Show first 5
+            log_message(f"  {c['hash']} {c['subject']}", to_console=True)
+        if len(commits) > 5:
+            log_message(f"  ... and {len(commits) - 5} more", to_console=True)
+
+        # Check if ## Unreleased exists
+        entries = get_unreleased_entries(changelog_path)
+
+        if entries is None:
+            # No ## Unreleased section - check if latest CHANGELOG version is missing a tag
+            changelog_version = self._get_latest_changelog_version(changelog_path)
+
+            if changelog_version and changelog_version != latest_tag:
+                # CHANGELOG has a version that's not tagged - just tag it
+                log_message(
+                    f"\n→ CHANGELOG has {changelog_version} but tag doesn't exist",
+                    to_console=True,
+                )
+                log_message("→ Creating missing tag...", to_console=True)
+
+                context["new_version"] = changelog_version
+                context["commit_message"] = f"Release {changelog_version}"
+                context["tag_only"] = True  # Signal that we only need to tag, no commit
+                return StepResult(StepStatus.SUCCESS)
+
+            # No version mismatch - generate from commits
+            log_message("\n⚠ No ## Unreleased section found", to_console=True)
+            log_message("→ Generating changelog entries from commits...", to_console=True)
+
+            generated_entries = await generate_changelog_from_commits(
+                commits, module_path.name, log_func=log_message
+            )
+
+            if not generated_entries:
+                log_message("⚠ Could not generate changelog entries", to_console=True)
+                return StepResult(StepStatus.SKIP)
+
+            # Add ## Unreleased section with generated entries
+            entries = [f"- {e}" for e in generated_entries]
+            self._add_unreleased_section(changelog_path, entries)
+            log_message(f"✓ Added ## Unreleased with {len(entries)} entries", to_console=True)
 
         log_message(f"\n→ Found {len(entries)} unreleased entries:", to_console=True)
         for entry in entries:
