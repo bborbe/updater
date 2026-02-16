@@ -372,10 +372,30 @@ Module: {module_name}
 Unreleased entries:
 {bullets}
 
-Version Bump Rules:
-- **MAJOR**: Breaking API changes, incompatible changes
-- **MINOR**: New features, new functionality (backwards-compatible)
-- **PATCH**: Bug fixes, dependency updates, small improvements
+Version Bump Rules (Semantic Versioning):
+
+**MAJOR** - Breaking changes that require user action:
+- Removed/renamed public APIs, functions, or CLI flags
+- Changed behavior that breaks existing usage
+- Incompatible configuration changes
+
+**MINOR** - New functionality (backwards-compatible):
+- New features, commands, endpoints, or modes
+- New CLI flags or configuration options
+- New public APIs or functions
+- Significant capability additions
+- Keywords: "add", "new", "support", "implement", "introduce"
+
+**PATCH** - Bug fixes and maintenance:
+- Bug fixes
+- Documentation updates (README, comments)
+- Dependency updates (unless they add features)
+- CI/CD changes, workflow updates
+- Performance improvements (no new features)
+- Refactoring (no behavior change)
+
+IMPORTANT: Lean toward MINOR if any entry adds NEW functionality, even if mixed with patches.
+Example: "Add REST server mode" + "Update README" = MINOR (new feature present)
 
 Return ONLY this JSON format (no markdown, no code blocks):
 {{
