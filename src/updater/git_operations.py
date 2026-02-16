@@ -369,3 +369,26 @@ def git_tag_from_changelog(module_path: Path, log_func: Callable[..., None]) -> 
     )
 
     log_func(f"✓ Tagged HEAD with: {tag}", to_console=True)
+
+
+def git_push(module_path: Path, log_func: Callable[..., None]) -> None:
+    """Push commits and tags to origin.
+
+    Args:
+        module_path: Path to module
+        log_func: Logging function to use
+
+    Raises:
+        RuntimeError: If git push fails
+    """
+    from .log_manager import run_command
+
+    log_func("\n=== Phase 7: Git Push ===", to_console=True)
+
+    log_func("→ Pushing commits to origin", to_console=config.VERBOSE_MODE)
+    run_command("git push origin", cwd=module_path, quiet=True, log_func=log_func)
+
+    log_func("→ Pushing tags to origin", to_console=config.VERBOSE_MODE)
+    run_command("git push origin --tags", cwd=module_path, quiet=True, log_func=log_func)
+
+    log_func("✓ Push completed", to_console=True)

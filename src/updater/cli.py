@@ -7,22 +7,15 @@ from datetime import datetime
 from pathlib import Path
 
 from . import config
-from .changelog import add_to_unreleased, update_changelog_with_suggestions
-from .claude_analyzer import analyze_changes_with_claude, verify_claude_auth
+from .claude_analyzer import verify_claude_auth
 from .docker_updater import update_dockerfile_images
 from .file_utils import condense_file_list
 from .git_operations import (
     check_git_status,
-    ensure_changelog_tag,
     ensure_gitignore_entry,
     find_git_repo,
-    git_commit,
-    git_tag_from_changelog,
     update_git_branch,
 )
-from .go_updater import run_precommit as run_go_precommit
-from .go_updater import update_go_dependencies
-from .gomod_excludes import apply_gomod_excludes_and_replaces
 from .log_manager import (
     cleanup_old_logs,
     close_module_logging,
@@ -36,11 +29,7 @@ from .module_discovery import (
     discover_python_modules,
 )
 from .prompts import prompt_skip_or_retry, prompt_yes_no
-from .python_updater import run_precommit as run_python_precommit
-from .python_updater import update_python_dependencies
-from .python_version_updater import update_python_versions
 from .sound import play_completion_sound, play_error_sound
-from .version_updater import update_versions
 
 
 def print_commit_summary(
@@ -79,6 +68,7 @@ async def process_single_go_module(module_path: Path, update_deps: bool = True) 
     """Process a single Go module.
 
     Creates a new Claude session for analyzing changes to ensure clean, isolated analysis.
+    Delegates to a composable pipeline of steps.
 
     Args:
         module_path: Path to the module
@@ -88,6 +78,20 @@ async def process_single_go_module(module_path: Path, update_deps: bool = True) 
         Tuple of (success: bool, status: str)
         status can be: 'updated', 'up-to-date', 'skipped', 'failed'
     """
+    from .pipeline import (
+        ChangelogStep,
+        CheckChangesStep,
+        GitCommitStep,
+        GitConfirmStep,
+        GoDepSkipStep,
+        GoDepUpdateStep,
+        GoExcludesStep,
+        GoVersionUpdateStep,
+        Pipeline,
+        PrecommitStep,
+        StepStatus,
+    )
+
     log_file = None
     try:
         # Setup logging for this module
@@ -108,171 +112,28 @@ async def process_single_go_module(module_path: Path, update_deps: bool = True) 
             log_message("✗ No git repository found", to_console=True)
             return (False, "failed")
 
-        # Phase 1a: Update runtime versions (golang, alpine)
-        version_updates = update_versions(module_path, log_func=log_message)
+        # Build pipeline
+        dep_step = GoDepUpdateStep() if update_deps else GoDepSkipStep()
+        pipeline = Pipeline(
+            [
+                GoVersionUpdateStep(),
+                GoExcludesStep(),
+                dep_step,
+                CheckChangesStep(phase="update"),
+                PrecommitStep(project_type="go"),
+                CheckChangesStep(phase="precommit"),
+                ChangelogStep(),
+                GitConfirmStep(),
+                GitCommitStep(),
+            ]
+        )
 
-        # Phase 1b: Apply standard excludes and replaces
-        log_message("\n=== Phase 1b: Apply Standard Excludes/Replaces ===", to_console=True)
-        excludes_updates = apply_gomod_excludes_and_replaces(module_path, log_func=log_message)
+        result = await pipeline.run(module_path)
 
-        # Phase 1c: Update dependencies (optional)
-        dep_updates = False
-        if update_deps:
-            dep_updates = update_go_dependencies(module_path, log_func=log_message)
-        else:
-            log_message("\n=== Phase 1c: Skip Dependency Updates ===", to_console=True)
-            log_message("  → Updating Go version only (no dependency changes)", to_console=True)
-
-        updates_made = version_updates or excludes_updates or dep_updates
-
-        # Phase 1d: Check if git shows any changes (from this run or previous runs)
-        change_count, files = check_git_status(module_path)
-
-        if change_count == 0 and not updates_made:
-            log_message("\n✓ No updates needed - module is already up to date", to_console=True)
+        if result.status == StepStatus.UP_TO_DATE:
             return (True, "up-to-date")
-
-        if change_count == 0:
-            log_message("\n✓ No changes detected after dependency update", to_console=True)
-            return (True, "up-to-date")
-
-        if updates_made:
-            log_message(
-                f"\n→ {change_count} file(s) changed after dependency update",
-                to_console=True,
-            )
-        else:
-            log_message(
-                f"\n→ Processing {change_count} uncommitted file(s) from previous run",
-                to_console=True,
-            )
-
-        # Show condensed file list if 20 or fewer lines
-        condensed_files = condense_file_list(files)
-        if len(condensed_files) <= 20:
-            for f in condensed_files:
-                log_message(f"  {f}", to_console=True)
-
-        # Phase 2: Run precommit (validate and auto-format)
-        run_go_precommit(module_path, log_func=log_message)
-
-        # Phase 2b: Check if changes remain after precommit
-        change_count, files = check_git_status(module_path)
-        if change_count == 0:
-            log_message(
-                "\n✓ No changes remain after precommit (auto-formatted/fixed)",
-                to_console=True,
-            )
-            return (True, "up-to-date")
-
-        log_message(f"→ {change_count} file(s) changed after precommit", to_console=True)
-
-        # Show condensed file list if 20 or fewer lines
-        condensed_files = condense_file_list(files)
-        if len(condensed_files) <= 20:
-            for f in condensed_files:
-                log_message(f"  {f}", to_console=True)
-
-        # Phase 3: Analyze changes with Claude
-        analysis = await analyze_changes_with_claude(module_path, log_func=log_message)
-
-        # Check if version bump is needed
-        if analysis["version_bump"] == "none":
-            # No version bump needed - just commit without CHANGELOG/tag
-            log_message(
-                "\n→ No version bump needed (infrastructure changes only)",
-                to_console=True,
-            )
-
-            print_commit_summary(
-                module_path.name,
-                analysis,
-                note="No version bump or tag (infrastructure changes only)",
-            )
-
-            # Ask for confirmation if required
-            if config.REQUIRE_CONFIRM:
-                if not prompt_yes_no("\nProceed with commit (no tag)?", default_yes=True):
-                    log_message("\n⚠ Skipped by user", to_console=True)
-                    log_message("  Changes are staged but not committed", to_console=True)
-                    return (True, "skipped")
-
-            git_commit(module_path, analysis["commit_message"], log_func=log_message)
-            ensure_changelog_tag(module_path, log_func=log_message)
-            log_message("\n✓ Commit completed successfully!", to_console=True)
-            return (True, "updated")
-
-        # Phase 4: Update CHANGELOG with Claude's suggestions
-        changelog_path = module_path / "CHANGELOG.md"
-
-        # Handle --no-tag mode (add to Unreleased, no version/tag)
-        if config.NO_TAG:
-            if not changelog_path.exists():
-                log_message(
-                    "\n→ No CHANGELOG.md found, committing without changes", to_console=True
-                )
-                print_commit_summary(
-                    module_path.name,
-                    analysis,
-                    note="No CHANGELOG.md found (--no-tag mode)",
-                )
-            else:
-                add_to_unreleased(module_path, analysis, log_func=log_message)
-                print_commit_summary(
-                    module_path.name,
-                    analysis,
-                    note="Changes added to ## Unreleased (--no-tag mode)",
-                )
-
-            # Ask for confirmation if required
-            if config.REQUIRE_CONFIRM:
-                if not prompt_yes_no("\nProceed with commit (no tag)?", default_yes=True):
-                    log_message("\n⚠ Skipped by user", to_console=True)
-                    log_message("  Changes are staged but not committed", to_console=True)
-                    return (True, "skipped")
-
-            git_commit(module_path, analysis["commit_message"], log_func=log_message)
-            log_message("\n✓ Commit completed successfully!", to_console=True)
-            return (True, "updated")
-
-        # Normal mode: create version and tag
-        if not changelog_path.exists():
-            # No CHANGELOG.md - commit without tag
-            log_message("\n→ No CHANGELOG.md found, committing without tag", to_console=True)
-
-            print_commit_summary(
-                module_path.name,
-                analysis,
-                note="No CHANGELOG.md found, no version tag will be created",
-            )
-
-            # Ask for confirmation if required
-            if config.REQUIRE_CONFIRM:
-                if not prompt_yes_no("\nProceed with commit (no tag)?", default_yes=True):
-                    log_message("\n⚠ Skipped by user", to_console=True)
-                    log_message("  Changes are staged but not committed", to_console=True)
-                    return (True, "skipped")
-
-            git_commit(module_path, analysis["commit_message"], log_func=log_message)
-            log_message("\n✓ Commit completed successfully!", to_console=True)
-            return (True, "updated")
-
-        # CHANGELOG.md exists - update and create tag
-        new_version = update_changelog_with_suggestions(module_path, analysis, log_func=log_message)
-
-        # Show summary and ask for confirmation (always to console)
-        print_commit_summary(module_path.name, analysis, new_version=new_version)
-
-        # Ask for confirmation if required
-        if config.REQUIRE_CONFIRM:
-            if not prompt_yes_no("\nProceed with commit and tag?", default_yes=True):
-                log_message("\n⚠ Skipped by user", to_console=True)
-                log_message("  Changes are staged but not committed", to_console=True)
-                return (True, "skipped")
-
-        git_commit(module_path, analysis["commit_message"], log_func=log_message)
-        git_tag_from_changelog(module_path, log_func=log_message)
-        log_message("\n✓ Update completed successfully!", to_console=True)
+        if result.status == StepStatus.SKIP:
+            return (True, "skipped")
         return (True, "updated")
 
     except Exception as e:
@@ -290,6 +151,7 @@ async def process_single_python_module(module_path: Path) -> tuple[bool, str]:
     """Process a single Python module.
 
     Creates a new Claude session for analyzing changes to ensure clean, isolated analysis.
+    Delegates to a composable pipeline of steps.
 
     Args:
         module_path: Path to the module
@@ -298,6 +160,18 @@ async def process_single_python_module(module_path: Path) -> tuple[bool, str]:
         Tuple of (success: bool, status: str)
         status can be: 'updated', 'up-to-date', 'skipped', 'failed'
     """
+    from .pipeline import (
+        ChangelogStep,
+        CheckChangesStep,
+        GitCommitStep,
+        GitConfirmStep,
+        Pipeline,
+        PrecommitStep,
+        PythonDepUpdateStep,
+        PythonVersionUpdateStep,
+        StepStatus,
+    )
+
     log_file = None
     try:
         # Setup logging for this module
@@ -318,156 +192,26 @@ async def process_single_python_module(module_path: Path) -> tuple[bool, str]:
             log_message("✗ No git repository found", to_console=True)
             return (False, "failed")
 
-        # Phase 1a: Update Python versions
-        version_updates = update_python_versions(module_path, log_func=log_message)
+        # Build pipeline
+        pipeline = Pipeline(
+            [
+                PythonVersionUpdateStep(),
+                PythonDepUpdateStep(),
+                CheckChangesStep(phase="update"),
+                PrecommitStep(project_type="python"),
+                CheckChangesStep(phase="precommit"),
+                ChangelogStep(),
+                GitConfirmStep(),
+                GitCommitStep(),
+            ]
+        )
 
-        # Phase 1b: Update dependencies
-        dep_updates = update_python_dependencies(module_path, log_func=log_message)
+        result = await pipeline.run(module_path)
 
-        updates_made = version_updates or dep_updates
-
-        # Check if git shows any changes
-        change_count, files = check_git_status(module_path)
-
-        if change_count == 0 and not updates_made:
-            log_message("\n✓ No updates needed - module is already up to date", to_console=True)
+        if result.status == StepStatus.UP_TO_DATE:
             return (True, "up-to-date")
-
-        if change_count == 0:
-            log_message("\n✓ No changes detected after dependency update", to_console=True)
-            return (True, "up-to-date")
-
-        if updates_made:
-            log_message(
-                f"\n→ {change_count} file(s) changed after dependency update",
-                to_console=True,
-            )
-        else:
-            log_message(
-                f"\n→ Processing {change_count} uncommitted file(s) from previous run",
-                to_console=True,
-            )
-
-        # Show condensed file list if 20 or fewer lines
-        condensed_files = condense_file_list(files)
-        if len(condensed_files) <= 20:
-            for f in condensed_files:
-                log_message(f"  {f}", to_console=True)
-
-        # Phase 2: Run precommit (validate and auto-format)
-        run_python_precommit(module_path, log_func=log_message)
-
-        # Phase 2b: Check if changes remain after precommit
-        change_count, files = check_git_status(module_path)
-        if change_count == 0:
-            log_message(
-                "\n✓ No changes remain after precommit (auto-formatted/fixed)",
-                to_console=True,
-            )
-            return (True, "up-to-date")
-
-        log_message(f"→ {change_count} file(s) changed after precommit", to_console=True)
-
-        # Show condensed file list if 20 or fewer lines
-        condensed_files = condense_file_list(files)
-        if len(condensed_files) <= 20:
-            for f in condensed_files:
-                log_message(f"  {f}", to_console=True)
-
-        # Phase 3: Analyze changes with Claude
-        analysis = await analyze_changes_with_claude(module_path, log_func=log_message)
-
-        # Check if version bump is needed
-        if analysis["version_bump"] == "none":
-            log_message(
-                "\n→ No version bump needed (infrastructure changes only)",
-                to_console=True,
-            )
-
-            print_commit_summary(
-                module_path.name,
-                analysis,
-                note="No version bump or tag (infrastructure changes only)",
-            )
-
-            if config.REQUIRE_CONFIRM:
-                if not prompt_yes_no("\nProceed with commit (no tag)?", default_yes=True):
-                    log_message("\n⚠ Skipped by user", to_console=True)
-                    log_message("  Changes are staged but not committed", to_console=True)
-                    return (True, "skipped")
-
-            git_commit(module_path, analysis["commit_message"], log_func=log_message)
-            ensure_changelog_tag(module_path, log_func=log_message)
-            log_message("\n✓ Commit completed successfully!", to_console=True)
-            return (True, "updated")
-
-        # Phase 4: Update CHANGELOG with Claude's suggestions
-        changelog_path = module_path / "CHANGELOG.md"
-
-        # Handle --no-tag mode (add to Unreleased, no version/tag)
-        if config.NO_TAG:
-            if not changelog_path.exists():
-                log_message(
-                    "\n→ No CHANGELOG.md found, committing without changes", to_console=True
-                )
-                print_commit_summary(
-                    module_path.name,
-                    analysis,
-                    note="No CHANGELOG.md found (--no-tag mode)",
-                )
-            else:
-                add_to_unreleased(module_path, analysis, log_func=log_message)
-                print_commit_summary(
-                    module_path.name,
-                    analysis,
-                    note="Changes added to ## Unreleased (--no-tag mode)",
-                )
-
-            # Ask for confirmation if required
-            if config.REQUIRE_CONFIRM:
-                if not prompt_yes_no("\nProceed with commit (no tag)?", default_yes=True):
-                    log_message("\n⚠ Skipped by user", to_console=True)
-                    log_message("  Changes are staged but not committed", to_console=True)
-                    return (True, "skipped")
-
-            git_commit(module_path, analysis["commit_message"], log_func=log_message)
-            log_message("\n✓ Commit completed successfully!", to_console=True)
-            return (True, "updated")
-
-        # Normal mode: create version and tag
-        if not changelog_path.exists():
-            log_message("\n→ No CHANGELOG.md found, committing without tag", to_console=True)
-
-            print_commit_summary(
-                module_path.name,
-                analysis,
-                note="No CHANGELOG.md found, no version tag will be created",
-            )
-
-            if config.REQUIRE_CONFIRM:
-                if not prompt_yes_no("\nProceed with commit (no tag)?", default_yes=True):
-                    log_message("\n⚠ Skipped by user", to_console=True)
-                    log_message("  Changes are staged but not committed", to_console=True)
-                    return (True, "skipped")
-
-            git_commit(module_path, analysis["commit_message"], log_func=log_message)
-            log_message("\n✓ Commit completed successfully!", to_console=True)
-            return (True, "updated")
-
-        # CHANGELOG.md exists - update and create tag
-        new_version = update_changelog_with_suggestions(module_path, analysis, log_func=log_message)
-
-        print_commit_summary(module_path.name, analysis, new_version=new_version)
-
-        if config.REQUIRE_CONFIRM:
-            if not prompt_yes_no("\nProceed with commit and tag?", default_yes=True):
-                log_message("\n⚠ Skipped by user", to_console=True)
-                log_message("  Changes are staged but not committed", to_console=True)
-                return (True, "skipped")
-
-        git_commit(module_path, analysis["commit_message"], log_func=log_message)
-        git_tag_from_changelog(module_path, log_func=log_message)
-        log_message("\n✓ Update completed successfully!", to_console=True)
+        if result.status == StepStatus.SKIP:
+            return (True, "skipped")
         return (True, "updated")
 
     except Exception as e:
@@ -504,39 +248,20 @@ async def process_module_with_retry(
             success, status = await process_single_python_module(module_path)
         elif project_type == "docker":
             # Docker projects: update Dockerfile images and commit
+            from .pipeline import DockerCommitStep, DockerUpdateStep, Pipeline, StepStatus
+
             log_message(f"\n{'=' * 70}", to_console=True)
             log_message(f"Docker Project: {module_path.name}", to_console=True)
             log_message("=" * 70, to_console=True)
 
-            updated, updates = update_dockerfile_images(module_path, log_func=log_message)
+            pipeline = Pipeline([DockerUpdateStep(), DockerCommitStep()])
+            result = await pipeline.run(module_path)
 
-            if updated:
-                # Check if there are actually uncommitted changes
-                change_count, _ = check_git_status(module_path)
-
-                if change_count > 0:
-                    # Generate commit message from updates
-                    if len(updates) == 1:
-                        commit_msg = f"Update Dockerfile: {updates[0]}"
-                    else:
-                        commit_msg = "Update Dockerfile images\n\n" + "\n".join(
-                            f"- {u}" for u in updates
-                        )
-
-                    # Commit changes
-                    log_message("\n=== Committing Changes ===", to_console=True)
-                    git_commit(module_path, commit_msg, log_func=log_message)
-                    log_message("\n✓ Dockerfile updated and committed", to_console=True)
-                    success, status = True, "updated"
-                else:
-                    log_message(
-                        "\n✓ Dockerfile updated (already matches committed version)",
-                        to_console=True,
-                    )
-                    success, status = True, "up-to-date"
-            else:
+            if result.status == StepStatus.UP_TO_DATE:
                 log_message("\n✓ Dockerfile already up to date", to_console=True)
                 success, status = True, "up-to-date"
+            else:
+                success, status = True, "updated"
         else:
             success, status = await process_single_go_module(module_path, update_deps=update_deps)
 
@@ -1216,3 +941,239 @@ async def main_docker_async() -> int:
 def main_docker() -> int:
     """Docker-only entry point."""
     return asyncio.run(main_docker_async())
+
+
+async def process_release_module(module_path: Path) -> tuple[bool, str]:
+    """Process a single module for release-only workflow.
+
+    Scans CHANGELOG.md for unreleased entries, uses Claude to determine
+    version bump, promotes unreleased to versioned section, commits, tags, and pushes.
+    Delegates to a composable pipeline of steps.
+
+    Args:
+        module_path: Path to the module
+
+    Returns:
+        Tuple of (success: bool, status: str)
+        status can be: 'released', 'nothing-to-release', 'skipped', 'failed'
+    """
+    from .pipeline import (
+        GitCommitStep,
+        GitPushStep,
+        Pipeline,
+        ReleaseStep,
+        StepStatus,
+    )
+
+    log_file = None
+    try:
+        log_file = setup_module_logging(module_path)
+
+        log_message(f"\n{'=' * 70}", to_console=True)
+        log_message(f"Release: {module_path.name}", to_console=True)
+        log_message("=" * 70, to_console=True)
+        if log_file and not config.VERBOSE_MODE:
+            print(f"  Log: {log_file}")
+
+        # Find git repo
+        git_repo = find_git_repo(module_path)
+        if not git_repo:
+            log_message("✗ No git repository found", to_console=True)
+            return (False, "failed")
+
+        # Build pipeline: Release → Commit → Push
+        pipeline = Pipeline(
+            [
+                ReleaseStep(),
+                GitCommitStep(),
+                GitPushStep(),
+            ]
+        )
+
+        context: dict = {}
+        result = await pipeline.run(module_path, context)
+
+        if result.status == StepStatus.UP_TO_DATE:
+            return (True, "nothing-to-release")
+        if result.status == StepStatus.SKIP:
+            return (True, "skipped")
+
+        new_version = context.get("new_version", "unknown")
+        log_message(f"\n✓ Released {new_version} successfully!", to_console=True)
+        return (True, "released")
+
+    except Exception as e:
+        log_message(f"\n✗ Error processing {module_path}: {e}", to_console=True)
+        if config.VERBOSE_MODE:
+            traceback.print_exc()
+        return (False, "failed")
+    finally:
+        close_module_logging()
+        cleanup_old_logs(module_path)
+
+
+async def process_release_with_retry(module_path: Path) -> tuple[bool, str]:
+    """Process a release module with retry on failure.
+
+    Args:
+        module_path: Path to the module
+
+    Returns:
+        Tuple of (success: bool, status: str)
+    """
+    attempt = 1
+
+    while True:
+        if attempt > 1:
+            print(f"\n=== Retrying {module_path} (attempt {attempt}) ===\n")
+
+        success, status = await process_release_module(module_path)
+
+        if success:
+            return True, status
+
+        play_error_sound()
+        print(f"\n✗ Release failed for {module_path}")
+        print("  → Fix the issues and retry, or skip this module")
+
+        choice = prompt_skip_or_retry()
+
+        if choice == "skip":
+            print(f"⚠ Skipping {module_path}\n")
+            return False, "skipped"
+
+        attempt += 1
+
+
+async def main_release_async() -> int:
+    """Release-only async workflow.
+
+    Scans CHANGELOG.md for unreleased entries, determines version bump,
+    promotes unreleased to versioned section, commits, tags, and pushes.
+
+    Returns:
+        Exit code (0 for success, 1 for error)
+    """
+    parser = argparse.ArgumentParser(
+        description="Release unreleased CHANGELOG entries (version bump, commit, tag, push)"
+    )
+    parser.add_argument(
+        "modules",
+        nargs="*",
+        default=["."],
+        help="Path(s) to module(s) or parent directories (default: current directory)",
+    )
+    parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="Show full command output",
+    )
+    parser.add_argument(
+        "--model",
+        choices=["sonnet", "opus", "haiku"],
+        default="sonnet",
+        help="Claude model to use (default: sonnet)",
+    )
+    parser.add_argument(
+        "--require-commit-confirm",
+        action="store_true",
+        help="Require user confirmation before releasing",
+    )
+
+    args = parser.parse_args()
+
+    config.VERBOSE_MODE = args.verbose
+    config.MODEL = args.model
+    config.REQUIRE_CONFIRM = args.require_commit_confirm
+    config.RUN_TIMESTAMP = datetime.now().strftime("%Y-%m-%d-%H%M%S")
+
+    # Step 0: Verify Claude authentication
+    print("=== Step 0: Verify Claude Authentication ===\n")
+    auth_ok, auth_error = await verify_claude_auth()
+    if not auth_ok:
+        print(f"✗ {auth_error}")
+        play_completion_sound()
+        return 1
+    print("✓ Claude authentication verified\n")
+
+    # Resolve module paths
+    print("=== Step 1: Discover Modules ===\n")
+
+    module_paths: list[Path] = []
+    for path_str in args.modules:
+        path = Path(path_str).resolve()
+        if not path.exists():
+            print(f"✗ Module path does not exist: {path}")
+            play_completion_sound()
+            return 1
+
+        # Check if this path has a CHANGELOG.md directly
+        if (path / "CHANGELOG.md").exists():
+            module_paths.append(path)
+        else:
+            # Discover all modules recursively
+            discovered = discover_all_modules(path, recursive=True)
+            for mod_list in discovered.values():
+                for mod in mod_list:
+                    if (mod / "CHANGELOG.md").exists():
+                        module_paths.append(mod)
+
+    # Remove duplicates
+    module_paths = list(dict.fromkeys(module_paths))
+
+    if not module_paths:
+        print("✗ No modules with CHANGELOG.md found")
+        play_completion_sound()
+        return 1
+
+    print(f"Found {len(module_paths)} module(s) with CHANGELOG.md\n")
+    for mod in module_paths:
+        print(f"  - {mod}")
+    print()
+
+    # Process each module
+    results = []
+    for i, mod in enumerate(module_paths, 1):
+        if len(module_paths) > 1:
+            print(f"\n[{i}/{len(module_paths)}] {mod.name}")
+
+        success, status = await process_release_with_retry(mod)
+        results.append((mod, success, status))
+
+    # Summary
+    if len(module_paths) > 1:
+        print("\n" + "=" * 70)
+        print(f"SUMMARY: {len(module_paths)} module(s)")
+        print("=" * 70)
+
+        released = [mod for mod, _, status in results if status == "released"]
+        nothing = [mod for mod, _, status in results if status == "nothing-to-release"]
+        skipped = [mod for mod, _, status in results if status == "skipped"]
+        failed = [mod for mod, _, status in results if status == "failed"]
+
+        if released:
+            print(f"\n✓ Released: {len(released)}")
+            for mod in released:
+                print(f"  - {mod.name}")
+        if nothing:
+            print(f"\n✓ Nothing to release: {len(nothing)}")
+            for mod in nothing:
+                print(f"  - {mod.name}")
+        if skipped:
+            print(f"\n⚠ Skipped: {len(skipped)}")
+            for mod in skipped:
+                print(f"  - {mod.name}")
+        if failed:
+            print(f"\n✗ Failed: {len(failed)}")
+            for mod in failed:
+                print(f"  - {mod.name}")
+
+        print("\n" + "=" * 70)
+
+    play_completion_sound()
+    return 0
+
+
+def main_release() -> int:
+    """Release-only entry point."""
+    return asyncio.run(main_release_async())

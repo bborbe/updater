@@ -343,3 +343,120 @@ Return ONLY this JSON format (no markdown, no code blocks):
 
     # Should never reach here, but just in case
     raise ClaudeError(f"Claude analysis failed after {max_retries} attempts") from last_error
+
+
+async def analyze_unreleased_for_release(
+    entries: list[str], module_name: str, log_func: Callable[..., None] = log_message
+) -> dict[str, Any]:
+    """Ask Claude to determine version bump from unreleased changelog entries.
+
+    Args:
+        entries: List of bullet point strings from ## Unreleased section
+        module_name: Name of the module being released
+        log_func: Logging function to use
+
+    Returns:
+        Dict with keys: version_bump, commit_message
+
+    Raises:
+        ClaudeError: If Claude analysis fails after all retries
+    """
+    log_func("\n=== Analyze Unreleased Entries with Claude ===", to_console=True)
+
+    bullets = "\n".join(entries)
+
+    prompt = f"""Analyze these unreleased CHANGELOG entries and determine the appropriate version bump.
+
+Module: {module_name}
+
+Unreleased entries:
+{bullets}
+
+Version Bump Rules:
+- **MAJOR**: Breaking API changes, incompatible changes
+- **MINOR**: New features, new functionality (backwards-compatible)
+- **PATCH**: Bug fixes, dependency updates, small improvements
+
+Return ONLY this JSON format (no markdown, no code blocks):
+{{
+  "version_bump": "patch|minor|major"
+}}"""
+
+    max_retries = 3
+    retry_delays = [2, 5, 10]
+
+    last_error = None
+    for attempt in range(max_retries):
+        try:
+            clean_config_dir = _get_clean_config_dir()
+            env = os.environ.copy()
+            if clean_config_dir is not None:
+                env["CLAUDE_CONFIG_DIR"] = str(clean_config_dir)
+
+            options = ClaudeCodeOptions(
+                model=config.MODEL,
+                env=env,
+            )
+
+            response_text = ""
+
+            async with ClaudeSDKClient(options=options) as client:
+                await client.query(prompt)
+
+                async for message in client.receive_response():
+                    if isinstance(message, AssistantMessage):
+                        for block in message.content:
+                            if isinstance(block, TextBlock):
+                                response_text += block.text
+
+            # Parse JSON response
+            if "```json" in response_text:
+                start = response_text.find("```json") + 7
+                end = response_text.find("```", start)
+                response_text = response_text[start:end].strip()
+            elif "```" in response_text:
+                start = response_text.find("```") + 3
+                end = response_text.find("```", start)
+                response_text = response_text[start:end].strip()
+            else:
+                start = response_text.find("{")
+                end = response_text.rfind("}") + 1
+                if start != -1 and end > start:
+                    response_text = response_text[start:end].strip()
+
+            try:
+                analysis = json.loads(response_text)
+            except json.JSONDecodeError as e:
+                raise ClaudeError(
+                    f"Failed to parse Claude response as JSON: {e}\nResponse: {response_text}"
+                ) from e
+
+            version_bump = analysis.get("version_bump", "patch")
+            return {
+                "version_bump": version_bump,
+            }
+
+        except Exception as e:
+            error_str = str(e).lower()
+            is_retryable = any(
+                keyword in error_str
+                for keyword in ["timeout", "control request", "connection", "initialize"]
+            )
+
+            if is_retryable and attempt < max_retries - 1:
+                delay = retry_delays[attempt]
+                log_func(
+                    f"→ Timeout error (attempt {attempt + 1}/{max_retries}), "
+                    f"retrying in {delay}s...",
+                    to_console=True,
+                )
+                await asyncio.sleep(delay)
+                last_error = e
+                continue
+            else:
+                raise ClaudeError(f"Claude analysis failed: {e}") from e
+
+        finally:
+            await asyncio.sleep(config.CLAUDE_SESSION_DELAY)
+
+    raise ClaudeError(f"Claude analysis failed after {max_retries} attempts") from last_error
