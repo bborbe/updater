@@ -2,7 +2,7 @@
 
 from unittest.mock import Mock, patch
 
-from updater.git_operations import check_git_status
+from updater.git_operations import check_git_status, git_push
 
 
 def test_check_git_status_no_changes(tmp_path):
@@ -162,3 +162,16 @@ M  skeleton/vendor/github.com/baz/file.go
         # Should exclude all vendor/ files
         assert count == 3
         assert files == ["go.mod", "go.sum", "main.go"]
+
+
+def test_git_push_calls_push_and_tags(tmp_path):
+    """Test git_push pushes commits and tags to origin."""
+    log = Mock()
+
+    with patch("updater.log_manager.run_command") as mock_run:
+        git_push(tmp_path, log_func=log)
+
+        assert mock_run.call_count == 2
+        calls = [c[0][0] for c in mock_run.call_args_list]
+        assert "git push origin" in calls
+        assert "git push origin --tags" in calls

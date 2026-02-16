@@ -307,7 +307,10 @@ class TestProcessSingleModule:
             patch("updater.pipeline.apply_gomod_excludes_and_replaces", return_value=False),
             patch("updater.pipeline.update_go_dependencies", return_value=False),
             # First check shows changes, precommit runs, second check shows no changes
-            patch("updater.pipeline.check_git_status", side_effect=[(2, ["go.mod", "go.sum"]), (0, [])]),
+            patch(
+                "updater.pipeline.check_git_status",
+                side_effect=[(2, ["go.mod", "go.sum"]), (0, [])],
+            ),
             patch("updater.pipeline.run_go_precommit"),
             patch("updater.cli.close_module_logging"),
             patch("updater.cli.cleanup_old_logs"),
