@@ -8,6 +8,12 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## Unreleased
+
+- Auto-generate changelog entries from git commits when ## Unreleased is missing
+- Check commits since last tag to detect unreleased changes
+- Use Claude to create user-friendly changelog entries from commit messages
+
 ## v0.12.1
 
 - Improve version bump prompt with clearer semver guidance

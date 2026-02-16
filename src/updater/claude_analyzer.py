@@ -480,3 +480,130 @@ Return ONLY this JSON format (no markdown, no code blocks):
             await asyncio.sleep(config.CLAUDE_SESSION_DELAY)
 
     raise ClaudeError(f"Claude analysis failed after {max_retries} attempts") from last_error
+
+
+async def generate_changelog_from_commits(
+    commits: list[dict[str, str]], module_name: str, log_func: Callable[..., None] = log_message
+) -> list[str]:
+    """Generate changelog entries from git commits using Claude.
+
+    Args:
+        commits: List of dicts with 'hash', 'subject', 'body' keys
+        module_name: Name of the module
+        log_func: Logging function to use
+
+    Returns:
+        List of changelog entry strings (without leading "- ")
+
+    Raises:
+        ClaudeError: If Claude analysis fails
+    """
+    log_func("\n=== Generate Changelog from Commits ===", to_console=True)
+
+    # Format commits for the prompt
+    commit_text = "\n".join(
+        f"- {c['subject']}" + (f"\n  {c['body']}" if c['body'] else "")
+        for c in commits
+    )
+
+    prompt = f"""Generate CHANGELOG entries from these git commits.
+
+Module: {module_name}
+
+Commits since last release:
+{commit_text}
+
+Rules:
+- Create clear, user-facing changelog entries
+- Group related commits into single entries when appropriate
+- Use past tense (e.g., "Added", "Fixed", "Updated")
+- Focus on WHAT changed, not HOW
+- Omit merge commits and trivial changes (typos, formatting)
+- Each entry should be a complete sentence fragment
+
+Return ONLY this JSON format (no markdown, no code blocks):
+{{
+  "entries": [
+    "Add REST server mode for HTTP clients",
+    "Fix race condition in connection pool",
+    "Update Go to 1.26.0"
+  ]
+}}"""
+
+    max_retries = 3
+    retry_delays = [2, 5, 10]
+
+    last_error = None
+    for attempt in range(max_retries):
+        try:
+            clean_config_dir = _get_clean_config_dir()
+            env = os.environ.copy()
+            if clean_config_dir is not None:
+                env["CLAUDE_CONFIG_DIR"] = str(clean_config_dir)
+
+            options = ClaudeCodeOptions(
+                model=config.MODEL,
+                env=env,
+            )
+
+            response_text = ""
+
+            async with ClaudeSDKClient(options=options) as client:
+                await client.query(prompt)
+
+                async for message in client.receive_response():
+                    if isinstance(message, AssistantMessage):
+                        for block in message.content:
+                            if isinstance(block, TextBlock):
+                                response_text += block.text
+
+            # Parse JSON response
+            if "```json" in response_text:
+                start = response_text.find("```json") + 7
+                end = response_text.find("```", start)
+                response_text = response_text[start:end].strip()
+            elif "```" in response_text:
+                start = response_text.find("```") + 3
+                end = response_text.find("```", start)
+                response_text = response_text[start:end].strip()
+            else:
+                start = response_text.find("{")
+                end = response_text.rfind("}") + 1
+                if start != -1 and end > start:
+                    response_text = response_text[start:end].strip()
+
+            try:
+                analysis = json.loads(response_text)
+            except json.JSONDecodeError as e:
+                raise ClaudeError(
+                    f"Failed to parse Claude response as JSON: {e}\nResponse: {response_text}"
+                ) from e
+
+            entries = analysis.get("entries", [])
+            log_func(f"  Generated {len(entries)} changelog entries", to_console=True)
+            return entries
+
+        except Exception as e:
+            error_str = str(e).lower()
+            is_retryable = any(
+                keyword in error_str
+                for keyword in ["timeout", "control request", "connection", "initialize"]
+            )
+
+            if is_retryable and attempt < max_retries - 1:
+                delay = retry_delays[attempt]
+                log_func(
+                    f"→ Timeout error (attempt {attempt + 1}/{max_retries}), "
+                    f"retrying in {delay}s...",
+                    to_console=True,
+                )
+                await asyncio.sleep(delay)
+                last_error = e
+                continue
+            else:
+                raise ClaudeError(f"Changelog generation failed: {e}") from e
+
+        finally:
+            await asyncio.sleep(config.CLAUDE_SESSION_DELAY)
+
+    raise ClaudeError(f"Changelog generation failed after {max_retries} attempts") from last_error

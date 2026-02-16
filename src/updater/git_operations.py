@@ -371,6 +371,73 @@ def git_tag_from_changelog(module_path: Path, log_func: Callable[..., None]) -> 
     log_func(f"✓ Tagged HEAD with: {tag}", to_console=True)
 
 
+def get_latest_tag(module_path: Path) -> str | None:
+    """Get the latest git tag in the repository.
+
+    Args:
+        module_path: Path to git repository
+
+    Returns:
+        Latest tag name (e.g., "v1.9.3"), or None if no tags exist
+    """
+    result = subprocess.run(
+        "git describe --tags --abbrev=0 2>/dev/null || echo ''",
+        shell=True,
+        cwd=module_path,
+        capture_output=True,
+        text=True,
+    )
+
+    tag = result.stdout.strip()
+    return tag if tag else None
+
+
+def get_commits_since_tag(module_path: Path, tag: str | None) -> list[dict[str, str]]:
+    """Get all commits since a given tag.
+
+    Args:
+        module_path: Path to git repository
+        tag: Tag to compare against, or None to get all commits
+
+    Returns:
+        List of dicts with 'hash', 'subject', and 'body' keys
+    """
+    if tag:
+        range_spec = f"{tag}..HEAD"
+    else:
+        range_spec = "HEAD"
+
+    # Use a delimiter unlikely to appear in commit messages
+    delimiter = "---COMMIT_DELIMITER---"
+
+    result = subprocess.run(
+        f'git log {range_spec} --pretty=format:"%h{delimiter}%s{delimiter}%b{delimiter}"',
+        shell=True,
+        cwd=module_path,
+        capture_output=True,
+        text=True,
+    )
+
+    if result.returncode != 0 or not result.stdout.strip():
+        return []
+
+    commits = []
+    raw_commits = result.stdout.strip().split(delimiter + "\n")
+
+    for raw in raw_commits:
+        if not raw.strip():
+            continue
+        parts = raw.split(delimiter)
+        if len(parts) >= 2:
+            commits.append({
+                "hash": parts[0].strip(),
+                "subject": parts[1].strip(),
+                "body": parts[2].strip() if len(parts) > 2 else "",
+            })
+
+    return commits
+
+
 def git_push(module_path: Path, log_func: Callable[..., None]) -> None:
     """Push commits and tags to origin.
 
