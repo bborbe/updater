@@ -189,9 +189,10 @@ async def test_release_step_with_unreleased_entries(tmp_path):
 
     with (
         patch("updater.git_operations.get_latest_tag", return_value="v1.0.0"),
-        patch("updater.git_operations.get_commits_since_tag", return_value=[
-            {"hash": "abc123", "subject": "New feature", "body": ""}
-        ]),
+        patch(
+            "updater.git_operations.get_commits_since_tag",
+            return_value=[{"hash": "abc123", "subject": "New feature", "body": ""}],
+        ),
         patch("updater.pipeline.log_message"),
         patch("updater.pipeline.config") as mock_config,
         patch(
@@ -280,9 +281,10 @@ async def test_release_step_detects_missing_tag(tmp_path):
 
     with (
         patch("updater.git_operations.get_latest_tag", return_value="v0.5.1"),
-        patch("updater.git_operations.get_commits_since_tag", return_value=[
-            {"hash": "abc123", "subject": "Add feature", "body": ""}
-        ]),
+        patch(
+            "updater.git_operations.get_commits_since_tag",
+            return_value=[{"hash": "abc123", "subject": "Add feature", "body": ""}],
+        ),
         patch("updater.changelog.get_unreleased_entries", return_value=None),
         patch("updater.pipeline.log_message"),
     ):

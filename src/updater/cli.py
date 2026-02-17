@@ -975,6 +975,9 @@ async def process_release_module(module_path: Path) -> tuple[bool, str]:
         if log_file and not config.VERBOSE_MODE:
             print(f"  Log: {log_file}")
 
+        # Ensure .update-logs/ is in .gitignore
+        ensure_gitignore_entry(module_path, log_func=log_message)
+
         # Find git repo
         git_repo = find_git_repo(module_path)
         if not git_repo:

@@ -429,11 +429,13 @@ def get_commits_since_tag(module_path: Path, tag: str | None) -> list[dict[str, 
             continue
         parts = raw.split(delimiter)
         if len(parts) >= 2:
-            commits.append({
-                "hash": parts[0].strip(),
-                "subject": parts[1].strip(),
-                "body": parts[2].strip() if len(parts) > 2 else "",
-            })
+            commits.append(
+                {
+                    "hash": parts[0].strip(),
+                    "subject": parts[1].strip(),
+                    "body": parts[2].strip() if len(parts) > 2 else "",
+                }
+            )
 
     return commits
 

@@ -196,6 +196,9 @@ def update_github_workflows_golang(
 ) -> bool:
     """Update golang version in GitHub Actions workflows.
 
+    Skips workflows that use go-version-file: go.mod (preferred approach).
+    Only updates workflows with hardcoded go-version.
+
     Args:
         module_path: Path to module
         new_version: New go version (e.g., "1.23.5")
@@ -213,6 +216,10 @@ def update_github_workflows_golang(
     for workflow_file in workflows_dir.glob("*.yml"):
         content = workflow_file.read_text()
         original_content = content
+
+        # Skip if workflow uses go-version-file (preferred approach)
+        if "go-version-file:" in content:
+            continue
 
         # Pattern: go-version: '1.23.4' or go-version: "1.23.4" or go-version: 1.23.4
         pattern = r"go-version:\s*['\"]?(\d+\.\d+\.\d+)['\"]?"

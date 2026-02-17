@@ -502,8 +502,7 @@ async def generate_changelog_from_commits(
 
     # Format commits for the prompt
     commit_text = "\n".join(
-        f"- {c['subject']}" + (f"\n  {c['body']}" if c['body'] else "")
-        for c in commits
+        f"- {c['subject']}" + (f"\n  {c['body']}" if c["body"] else "") for c in commits
     )
 
     prompt = f"""Generate CHANGELOG entries from these git commits.

@@ -8,6 +8,12 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## v0.12.3
+
+- Fix release-only workflow to ensure .gitignore entries for .update-logs/
+- Fix GitHub workflow updater to skip workflows using go-version-file
+- Add test coverage for go-version-file preservation
+
 ## v0.12.2
 
 - Auto-generate changelog entries from git commits when ## Unreleased is missing

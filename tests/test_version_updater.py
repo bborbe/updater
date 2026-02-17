@@ -140,6 +140,15 @@ def test_update_github_workflows_golang(tmp_path):
     )
     assert not update_github_workflows_golang(tmp_path, "1.25.5")
 
+    # Test case 5: Skip when go-version-file is present (preferred approach)
+    ci_yml.write_text(
+        "      - uses: actions/setup-go@v5\n        with:\n          go-version-file: go.mod\n"
+    )
+    assert not update_github_workflows_golang(tmp_path, "1.25.5")
+    content = ci_yml.read_text()
+    assert "go-version-file: go.mod" in content
+    assert "go-version: " not in content
+
 
 def test_update_dockerfile_complete_example(tmp_path):
     """Test updating a complete Dockerfile like the skeleton example."""

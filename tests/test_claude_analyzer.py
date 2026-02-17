@@ -458,12 +458,14 @@ class TestGenerateChangelogFromCommits:
             {"hash": "def5678", "subject": "Fix bug in handler", "body": ""},
         ]
 
-        response = json.dumps({
-            "entries": [
-                "Add new feature for users",
-                "Fix bug in HTTP handler",
-            ]
-        })
+        response = json.dumps(
+            {
+                "entries": [
+                    "Add new feature for users",
+                    "Fix bug in HTTP handler",
+                ]
+            }
+        )
 
         mock_client = create_mock_client(response)
         mock_log = Mock()
