@@ -8,6 +8,10 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## v0.12.4
+
+- Release update
+
 ## v0.12.3
 
 - Fix release-only workflow to ensure .gitignore entries for .update-logs/
