@@ -136,7 +136,7 @@ async def verify_claude_auth() -> tuple[bool, str]:
     loop = asyncio.get_event_loop()
     original_handler = loop.get_exception_handler()
 
-    def suppress_sdk_cleanup_errors(loop, context):
+    def suppress_sdk_cleanup_errors(loop: asyncio.AbstractEventLoop, context: dict[str, Any]) -> None:
         """Suppress ProcessError exceptions from SDK subprocess cleanup."""
         exception = context.get("exception")
         # Suppress ProcessError with exit codes 143 (SIGTERM) or -15
