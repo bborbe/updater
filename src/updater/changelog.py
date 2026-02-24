@@ -9,13 +9,17 @@ from .exceptions import ChangelogError
 
 
 def get_unreleased_entries(changelog_path: Path) -> list[str] | None:
-    """Parse CHANGELOG.md and return bullet points under ## Unreleased.
+    """Parse CHANGELOG.md and return bullet points under ## Unreleased or any non-version header.
+
+    Looks for:
+    1. ## Unreleased
+    2. Any ## <Title> that's not a version (not matching ## vX.Y.Z)
 
     Args:
         changelog_path: Path to CHANGELOG.md
 
     Returns:
-        List of bullet point strings, or None if no Unreleased section or empty
+        List of bullet point strings, or None if no unreleased section or empty
     """
     if not changelog_path.exists():
         return None
@@ -23,12 +27,18 @@ def get_unreleased_entries(changelog_path: Path) -> list[str] | None:
     with open(changelog_path) as f:
         lines = f.readlines()
 
-    # Find ## Unreleased section
+    # Pattern to match version headers (## vX.Y.Z)
+    version_pattern = re.compile(r"^##\s+v\d+\.\d+\.\d+")
+
+    # Find first ## section that's not a version
     unreleased_idx = None
     for i, line in enumerate(lines):
-        if line.strip() == "## Unreleased":
-            unreleased_idx = i
-            break
+        stripped = line.strip()
+        if stripped.startswith("## "):
+            # Check if it's a version header
+            if not version_pattern.match(stripped):
+                unreleased_idx = i
+                break
 
     if unreleased_idx is None:
         return None
@@ -46,31 +56,45 @@ def get_unreleased_entries(changelog_path: Path) -> list[str] | None:
 
 
 def promote_unreleased_to_version(changelog_path: Path, new_version: str) -> None:
-    """Replace ## Unreleased header with a versioned header.
+    """Replace unreleased header with a versioned header.
 
-    Replaces the `## Unreleased` line with `## {new_version}`, keeping
-    all the bullet points in place.
+    Replaces any non-version `## <Title>` line (e.g., `## Unreleased`, `## Banana`)
+    with `## {new_version}`, keeping all the bullet points in place.
 
     Args:
         changelog_path: Path to CHANGELOG.md
         new_version: Version string (e.g., "v1.7.0")
 
     Raises:
-        ChangelogError: If CHANGELOG.md not found or no Unreleased section
+        ChangelogError: If CHANGELOG.md not found or no unreleased section
     """
     if not changelog_path.exists():
         raise ChangelogError(f"CHANGELOG.md not found at {changelog_path}")
 
     with open(changelog_path) as f:
-        content = f.read()
+        lines = f.readlines()
 
-    if "## Unreleased" not in content:
-        raise ChangelogError("No ## Unreleased section found in CHANGELOG.md")
+    # Pattern to match version headers (## vX.Y.Z)
+    version_pattern = re.compile(r"^##\s+v\d+\.\d+\.\d+")
 
-    content = content.replace("## Unreleased", f"## {new_version}", 1)
+    # Find first ## section that's not a version
+    unreleased_idx = None
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        if stripped.startswith("## "):
+            # Check if it's a version header
+            if not version_pattern.match(stripped):
+                unreleased_idx = i
+                break
+
+    if unreleased_idx is None:
+        raise ChangelogError("No unreleased section found in CHANGELOG.md")
+
+    # Replace the header line
+    lines[unreleased_idx] = f"## {new_version}\n"
 
     with open(changelog_path, "w") as f:
-        f.write(content)
+        f.writelines(lines)
 
 
 def extract_current_version(changelog_path: Path) -> tuple[int, int, int]:
@@ -171,22 +195,30 @@ def add_to_unreleased(
 
     lines = content.split("\n")
 
-    # Find or create ## Unreleased section
+    # Pattern to match version headers (## vX.Y.Z)
+    version_pattern = re.compile(r"^##\s+v\d+\.\d+\.\d+")
+
+    # Find or create unreleased section (any ## that's not a version)
     unreleased_idx = None
     first_version_idx = None
 
     for i, line in enumerate(lines):
-        if line.strip() == "## Unreleased":
-            unreleased_idx = i
-            break
-        if line.startswith("## v") and first_version_idx is None:
-            first_version_idx = i
+        stripped = line.strip()
+        if stripped.startswith("## "):
+            if version_pattern.match(stripped):
+                # This is a version - note it as first version if we haven't found unreleased
+                if first_version_idx is None:
+                    first_version_idx = i
+            else:
+                # This is a non-version header - treat as unreleased
+                unreleased_idx = i
+                break
 
     if unreleased_idx is not None:
         # Unreleased section exists - append to it
         # Find the end of existing entries (next ## section or empty line)
         insert_idx = unreleased_idx + 1
-        # Skip blank lines after ## Unreleased
+        # Skip blank lines after unreleased header
         while insert_idx < len(lines) and lines[insert_idx].strip() == "":
             insert_idx += 1
         # Find where existing bullets end

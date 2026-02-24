@@ -132,6 +132,35 @@ async def verify_claude_auth() -> tuple[bool, str]:
     Returns:
         Tuple of (success: bool, error_message: str)
     """
+    # Suppress SDK subprocess cleanup exceptions (cosmetic only, doesn't affect functionality)
+    loop = asyncio.get_event_loop()
+    original_handler = loop.get_exception_handler()
+
+    def suppress_sdk_cleanup_errors(loop: asyncio.AbstractEventLoop, context: dict[str, Any]) -> None:
+        """Suppress ProcessError exceptions from SDK subprocess cleanup."""
+        exception = context.get("exception")
+        # Suppress ProcessError with exit codes 143 (SIGTERM) or -15
+        if exception and "ProcessError" in str(type(exception)):
+            if "exit code -15" in str(exception) or "exit code 143" in str(exception):
+                return  # Suppress this specific error
+        # For other exceptions, use original handler or default
+        if original_handler:
+            original_handler(loop, context)
+        else:
+            loop.default_exception_handler(context)
+
+    loop.set_exception_handler(suppress_sdk_cleanup_errors)
+
+    try:
+        result = await _verify_claude_auth_impl()
+        return result
+    finally:
+        # Restore original exception handler
+        loop.set_exception_handler(original_handler)
+
+
+async def _verify_claude_auth_impl() -> tuple[bool, str]:
+    """Implementation of Claude authentication verification."""
     clean_config_dir = _get_clean_config_dir()
 
     env = os.environ.copy()
