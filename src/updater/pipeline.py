@@ -408,6 +408,28 @@ class ReleaseStep(Step):
         with open(changelog_path, "w") as f:
             f.write("\n".join(lines))
 
+    def _add_version_section(self, changelog_path: Path, version: str, entries: list[str]) -> None:
+        """Add version section directly (without unreleased step)."""
+        with open(changelog_path) as f:
+            content = f.read()
+
+        # Find first version section
+        lines = content.split("\n")
+        insert_idx = 0
+        for i, line in enumerate(lines):
+            if line.startswith("## v"):
+                insert_idx = i
+                break
+
+        # Build new version section
+        entries_text = "\n".join(entries)
+        new_section = f"## {version}\n\n{entries_text}\n"
+
+        lines.insert(insert_idx, new_section)
+
+        with open(changelog_path, "w") as f:
+            f.write("\n".join(lines))
+
     def _get_latest_changelog_version(self, changelog_path: Path) -> str | None:
         """Get the latest version from CHANGELOG.md (first ## vX.Y.Z section)."""
         import re
@@ -465,22 +487,29 @@ class ReleaseStep(Step):
                 context["tag_only"] = True  # Signal that we only need to tag, no commit
                 return StepResult(StepStatus.SUCCESS)
 
-            # No version mismatch - generate from commits
-            log_message("\n⚠ No ## Unreleased section found", to_console=True)
+            # No unreleased section - generate from commits
+            log_message("\n⚠ No unreleased section found", to_console=True)
             log_message("→ Generating changelog entries from commits...", to_console=True)
 
             generated_entries = await generate_changelog_from_commits(
                 commits, module_path.name, log_func=log_message
             )
 
-            if not generated_entries:
+            if generated_entries:
+                # Successfully generated - add unreleased section
+                entries = [f"- {e}" for e in generated_entries]
+                self._add_unreleased_section(changelog_path, entries)
+                log_message(f"✓ Added ## Unreleased with {len(entries)} entries", to_console=True)
+                has_unreleased_section = True
+            else:
+                # Could not generate - proceed with empty/minimal changelog
                 log_message("⚠ Could not generate changelog entries", to_console=True)
-                return StepResult(StepStatus.SKIP)
-
-            # Add ## Unreleased section with generated entries
-            entries = [f"- {e}" for e in generated_entries]
-            self._add_unreleased_section(changelog_path, entries)
-            log_message(f"✓ Added ## Unreleased with {len(entries)} entries", to_console=True)
+                log_message("→ Proceeding with minimal changelog entry", to_console=True)
+                entries = ["- Release update"]
+                has_unreleased_section = False
+        else:
+            # Unreleased section exists
+            has_unreleased_section = True
 
         log_message(f"\n→ Found {len(entries)} unreleased entries:", to_console=True)
         for entry in entries:
@@ -517,9 +546,15 @@ class ReleaseStep(Step):
                 log_message("\n⚠ Skipped by user", to_console=True)
                 return StepResult(StepStatus.SKIP)
 
-        # Promote unreleased to version
-        promote_unreleased_to_version(changelog_path, new_version)
-        log_message(f"\n✓ CHANGELOG updated: ## Unreleased → ## {new_version}", to_console=True)
+        # Update CHANGELOG with version
+        if has_unreleased_section:
+            # Promote existing unreleased section to version
+            promote_unreleased_to_version(changelog_path, new_version)
+            log_message(f"\n✓ CHANGELOG updated: unreleased section → ## {new_version}", to_console=True)
+        else:
+            # Directly add new version section
+            self._add_version_section(changelog_path, new_version, entries)
+            log_message(f"\n✓ CHANGELOG updated: added ## {new_version}", to_console=True)
 
         context["new_version"] = new_version
         context["commit_message"] = f"Release {new_version}"
