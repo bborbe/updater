@@ -140,6 +140,47 @@ def test_get_unreleased_entries_no_changelog(tmp_path):
     assert entries is None
 
 
+def test_get_unreleased_entries_custom_title(tmp_path):
+    """Test get_unreleased_entries finds entries under any non-version title."""
+    changelog_path = tmp_path / "CHANGELOG.md"
+    changelog_path.write_text(
+        """# Changelog
+
+## Banana
+
+- Add new feature
+- Fix critical bug
+
+## v1.0.0
+
+- Initial release
+"""
+    )
+
+    entries = get_unreleased_entries(changelog_path)
+    assert entries == ["- Add new feature", "- Fix critical bug"]
+
+
+def test_get_unreleased_entries_prefers_first_non_version(tmp_path):
+    """Test get_unreleased_entries finds first non-version section."""
+    changelog_path = tmp_path / "CHANGELOG.md"
+    changelog_path.write_text(
+        """# Changelog
+
+## WIP Changes
+
+- Work in progress
+
+## v1.0.0
+
+- Initial release
+"""
+    )
+
+    entries = get_unreleased_entries(changelog_path)
+    assert entries == ["- Work in progress"]
+
+
 # ---------------------------------------------------------------------------
 # promote_unreleased_to_version
 # ---------------------------------------------------------------------------
@@ -180,7 +221,7 @@ def test_promote_unreleased_to_version_no_file(tmp_path):
 
 
 def test_promote_unreleased_to_version_no_unreleased_section(tmp_path):
-    """Test promote_unreleased_to_version raises when no Unreleased section."""
+    """Test promote_unreleased_to_version raises when no unreleased section."""
     changelog_path = tmp_path / "CHANGELOG.md"
     changelog_path.write_text(
         """# Changelog
@@ -191,5 +232,55 @@ def test_promote_unreleased_to_version_no_unreleased_section(tmp_path):
 """
     )
 
-    with pytest.raises(ChangelogError, match="No ## Unreleased section"):
+    with pytest.raises(ChangelogError, match="No unreleased section"):
         promote_unreleased_to_version(changelog_path, "v1.1.0")
+
+
+def test_promote_unreleased_to_version_custom_title(tmp_path):
+    """Test promote_unreleased_to_version replaces custom title with version."""
+    changelog_path = tmp_path / "CHANGELOG.md"
+    changelog_path.write_text(
+        """# Changelog
+
+## Banana
+
+- Add new feature
+- Fix critical bug
+
+## v1.0.0
+
+- Initial release
+"""
+    )
+
+    promote_unreleased_to_version(changelog_path, "v1.1.0")
+
+    content = changelog_path.read_text()
+    assert "## v1.1.0" in content
+    assert "## Banana" not in content
+    assert "- Add new feature" in content
+    assert "- Fix critical bug" in content
+
+
+def test_promote_unreleased_to_version_wip_title(tmp_path):
+    """Test promote_unreleased_to_version replaces WIP title with version."""
+    changelog_path = tmp_path / "CHANGELOG.md"
+    changelog_path.write_text(
+        """# Changelog
+
+## WIP Changes
+
+- Work in progress
+
+## v1.0.0
+
+- Initial release
+"""
+    )
+
+    promote_unreleased_to_version(changelog_path, "v1.1.0")
+
+    content = changelog_path.read_text()
+    assert "## v1.1.0" in content
+    assert "## WIP Changes" not in content
+    assert "- Work in progress" in content
