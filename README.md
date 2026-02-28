@@ -4,46 +4,40 @@ Multi-language dependency updater with Claude-powered CHANGELOG generation and c
 
 **Supported Languages:** Go, Python | Node.js (planned)
 
-## Installation
+## Install
 
-From GitHub:
 ```bash
-# Auto-detect language (Go or Python)
-uvx --from git+https://github.com/bborbe/updater update-deps /path/to/module
-
-# Language-specific commands
-uvx --from git+https://github.com/bborbe/updater update-go /path/to/go-module
-uvx --from git+https://github.com/bborbe/updater update-go-only /path/to/go-module  # Version only, no deps
-uvx --from git+https://github.com/bborbe/updater update-go-with-deps /path/to/go-module  # Version + deps
-uvx --from git+https://github.com/bborbe/updater update-python /path/to/python-project
-uvx --from git+https://github.com/bborbe/updater update-docker /path/to/project  # Dockerfile only
-
-# Multiple specific modules (explicit paths)
-uvx --from git+https://github.com/bborbe/updater update-deps /path/to/moduleA /path/to/moduleB /path/to/moduleC
-
-# Parent directory (discovers all recursively, including nested)
-uvx --from git+https://github.com/bborbe/updater update-deps /path/to/modules
-
-# Monorepo (discovers all nested modules with smart ordering)
-cd /path/to/monorepo
-uvx --from git+https://github.com/bborbe/updater update-deps .
+uv tool install git+https://github.com/bborbe/updater
 ```
 
-Local development:
+## Quick Start
+
 ```bash
-# Run from local directory
-uv --directory /path/to/updater run update-deps /path/to/module --verbose
+# Auto-detect language and update
+update-deps /path/to/module
 
-# Or with uvx --reinstall (picks up latest changes)
-uvx --reinstall --from /path/to/updater update-deps /path/to/module --verbose
+# Language-specific
+update-go /path/to/go-module
+update-python /path/to/python-project
+update-docker /path/to/project  # Dockerfile base images only, no commit
 
-# Multiple specific modules
-uvx --reinstall --from /path/to/updater update-deps ~/workspace/raw ~/workspace/k8s ~/workspace/jira
+# Multiple modules or parent directory (discovers recursively)
+update-deps /path/to/moduleA /path/to/moduleB
+update-deps /path/to/modules
+
+# Options
+update-deps /path/to/module --verbose               # Show all output
+update-deps /path/to/module --model haiku           # Choose Claude model (default: sonnet)
+update-deps /path/to/module --require-commit-confirm  # Confirm before committing
 ```
 
-## Usage
+## Upgrade
 
-The tool follows this workflow:
+```bash
+uv tool upgrade updater
+```
+
+## How It Works
 
 **Go modules:**
 1. **Update versions** - golang, alpine (Dockerfile, go.mod, CI configs)
@@ -60,29 +54,9 @@ The tool follows this workflow:
 4. **Analyze changes** - Claude determines version bump and generates CHANGELOG entries
 5. **Commit & tag** - Git commit with Claude-generated message, git tag from CHANGELOG
 
-**Dockerfile only** (`update-docker`):
-1. **Update base images** - python, golang, alpine versions in Dockerfile
-2. No commit (changes only)
-
-### Options
-
-```bash
-# Verbose mode (show all output in console)
-uvx --from git+https://github.com/bborbe/updater update-deps /path/to/module --verbose
-
-# Choose Claude model (default: sonnet)
-uvx --from git+https://github.com/bborbe/updater update-deps /path/to/module --model haiku
-
-# Require confirmation before commits (default: auto-commit)
-uvx --from git+https://github.com/bborbe/updater update-deps /path/to/module --require-commit-confirm
-
-# Multiple modules with options
-uvx --from git+https://github.com/bborbe/updater update-deps /path/to/module1 /path/to/module2 --verbose
-```
-
 ### Retry/Skip on Failure
 
-If a module fails (tests, precommit errors), you'll be prompted:
+If a module fails, you'll be prompted:
 
 ```
 ✗ Module lib/alert failed
@@ -94,7 +68,7 @@ Skip or Retry? [s/R]:
 - **Retry (R)**: Fix the issue, press R to retry from Phase 1
 - **Skip (s)**: Skip this module and continue to next
 
-## Entry Points
+## Commands
 
 | Command | Description |
 |---------|-------------|
@@ -106,6 +80,14 @@ Skip or Retry? [s/R]:
 | `update-docker` | Dockerfile base images only (no commit) |
 | `release-only` | Release unreleased CHANGELOG entries (version bump, commit, tag, push) |
 
+## Requirements
+
+- **[uv](https://docs.astral.sh/uv/)** - `curl -LsSf https://astral.sh/uv/install.sh | sh`
+- `ANTHROPIC_API_KEY` environment variable
+- Git repository
+- For Go modules: `CHANGELOG.md` in module/package
+- For Python projects: `pyproject.toml` + `uv.lock` (legacy `requirements.txt` not supported)
+
 ## Features
 
 - **Claude-powered CHANGELOG** - Analyzes changes and generates meaningful entries
@@ -114,31 +96,17 @@ Skip or Retry? [s/R]:
 - **Monorepo support** - Recursive discovery with smart lib/-first ordering
 - **Idempotent** - Skips modules already up-to-date
 - **Version updates** - golang, alpine, python (Dockerfile, go.mod, pyproject.toml, CI)
-- **Standard excludes** - Applies go.mod excludes/replaces for problematic versions
 - **Clean output** - Quiet mode with per-module logs (`.update-logs/`)
-- **Retry/skip workflow** - Fix issues and retry, or skip failed modules
-- **Auto-gitignore** - Adds temporary files to each module's .gitignore
-- **Legacy project detection** - Warns about `requirements.txt` projects (migrate to uv first)
-
-## Requirements
-
-- **[uv](https://docs.astral.sh/uv/)** - Python package manager (install: `curl -LsSf https://astral.sh/uv/install.sh | sh`)
-- Python 3.12+ (automatically managed by uv)
-- `ANTHROPIC_API_KEY` environment variable
-- Git repository
-- For Go modules: CHANGELOG.md in module/package
-- For Python projects: `pyproject.toml` + `uv.lock` (legacy `requirements.txt` not supported)
-
-**Note**: This project uses uv for dependency management. No need for pyenv, pip, or virtualenv.
+- **Legacy project detection** - Warns about `requirements.txt` projects
 
 ## Documentation
 
-- [Monorepo Mode](docs/monorepo-mode.md) - Smart ordering and discovery
-- [Version Bumping](docs/version-bumping.md) - How Claude determines version bumps
-- [Logging](docs/logging.md) - Output and log management
-- [Development](docs/development.md) - Development setup and testing
-- [Roadmap](docs/roadmap.md) - Future plans and phases
+- [Monorepo Mode](docs/monorepo-mode.md)
+- [Version Bumping](docs/version-bumping.md)
+- [Logging](docs/logging.md)
+- [Development](docs/development.md)
+- [Roadmap](docs/roadmap.md)
 
 ## License
 
-This project is licensed under the BSD 2-Clause License - see the [LICENSE](LICENSE) file for details.
+BSD 2-Clause - see [LICENSE](LICENSE).
