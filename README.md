@@ -10,6 +10,12 @@ Multi-language dependency updater with Claude-powered CHANGELOG generation and c
 uv tool install git+https://github.com/bborbe/updater
 ```
 
+## Upgrade
+
+```bash
+uv tool upgrade updater
+```
+
 ## Quick Start
 
 ```bash
@@ -29,12 +35,6 @@ update-deps /path/to/modules
 update-deps /path/to/module --verbose               # Show all output
 update-deps /path/to/module --model haiku           # Choose Claude model (default: sonnet)
 update-deps /path/to/module --require-commit-confirm  # Confirm before committing
-```
-
-## Upgrade
-
-```bash
-uv tool upgrade updater
 ```
 
 ## How It Works
