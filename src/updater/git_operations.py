@@ -194,13 +194,25 @@ def update_git_branch(repo_path: Path, log_func: Callable[..., None] | None = No
         log(f"  ✗ Failed to fetch: {result.stderr}")
         return False
 
-    # Pull current branch (update from remote tracking branch)
-    log(f"  → Pulling {current_branch}")
-    result = subprocess.run("git pull", shell=True, cwd=repo_path, capture_output=True, text=True)
+    # Pull current branch only if it has a remote tracking branch
+    has_tracking = subprocess.run(
+        f"git rev-parse --abbrev-ref {current_branch}@{{u}}",
+        shell=True,
+        cwd=repo_path,
+        capture_output=True,
+        text=True,
+    )
 
-    if result.returncode != 0:
-        log(f"  ✗ Failed to pull: {result.stderr}")
-        return False
+    if has_tracking.returncode == 0:
+        log(f"  → Pulling {current_branch}")
+        result = subprocess.run(
+            "git pull", shell=True, cwd=repo_path, capture_output=True, text=True
+        )
+        if result.returncode != 0:
+            log(f"  ✗ Failed to pull: {result.stderr}")
+            return False
+    else:
+        log(f"  → Skipping pull (no tracking branch for {current_branch})")
 
     # Merge origin/master into current branch
     log("  → Merging origin/master")
