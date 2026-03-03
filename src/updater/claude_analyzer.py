@@ -3,6 +3,7 @@
 import asyncio
 import json
 import os
+import shutil
 import subprocess
 from collections.abc import Callable
 from pathlib import Path
@@ -108,6 +109,7 @@ def _get_clean_config_dir() -> Path | None:
 
     Only uses ~/.claude-clean if it was explicitly created by the user.
     Falls back to default Claude config otherwise.
+    Actively removes plugins and MCP configs that Claude may auto-install.
 
     Returns:
         Path to the clean config directory, or None to use default
@@ -120,6 +122,15 @@ def _get_clean_config_dir() -> Path | None:
     settings_path = clean_config_dir / "settings.json"
     if not settings_path.exists():
         settings_path.write_text(json.dumps({"permissions": {"allowedCommands": []}}))
+
+    # Remove plugins dir if auto-installed (contains MCP servers that trigger login)
+    plugins_dir = clean_config_dir / "plugins"
+    if plugins_dir.exists():
+        shutil.rmtree(plugins_dir)
+
+    # Remove any .mcp.json files
+    for mcp_file in clean_config_dir.glob(".mcp*.json"):
+        mcp_file.unlink()
 
     return clean_config_dir
 
