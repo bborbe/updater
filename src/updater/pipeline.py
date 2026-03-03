@@ -550,7 +550,9 @@ class ReleaseStep(Step):
         if has_unreleased_section:
             # Promote existing unreleased section to version
             promote_unreleased_to_version(changelog_path, new_version)
-            log_message(f"\n✓ CHANGELOG updated: unreleased section → ## {new_version}", to_console=True)
+            log_message(
+                f"\n✓ CHANGELOG updated: unreleased section → ## {new_version}", to_console=True
+            )
         else:
             # Directly add new version section
             self._add_version_section(changelog_path, new_version, entries)
