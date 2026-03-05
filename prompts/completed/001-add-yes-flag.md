@@ -1,5 +1,12 @@
 ---
-status: queued
+status: completed
+summary: Added --yes/-y flag for non-interactive mode across all CLI parsers with YES_MODE config, auto-accepting prompts in both prompt_yes_no() and prompt_skip_or_retry(), with full test coverage
+container: updater-001-add-yes-flag
+dark-factory-version: v0.17.11
+created: "2026-03-05T22:30:05Z"
+queued: "2026-03-05T22:30:05Z"
+started: "2026-03-05T22:49:37Z"
+completed: "2026-03-05T22:50:29Z"
 ---
 
 <objective>
