@@ -8,6 +8,10 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## v0.13.1
+
+- Fix nested session error when running update-all inside Claude Code by unsetting CLAUDECODE env var before ClaudeSDKClient calls
+
 ## v0.13.0
 
 - Add OSV vulnerability auto-fix: run `make osv-scanner` before precommit, parse vulnerable Go packages, and update them with `go get -u`

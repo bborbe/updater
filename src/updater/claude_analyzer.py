@@ -177,6 +177,7 @@ async def _verify_claude_auth_impl() -> tuple[bool, str]:
     clean_config_dir = _get_clean_config_dir()
 
     env = os.environ.copy()
+    env.pop("CLAUDECODE", None)
     if clean_config_dir is not None:
         env["CLAUDE_CONFIG_DIR"] = str(clean_config_dir)
 
@@ -307,6 +308,7 @@ Return ONLY this JSON format (no markdown, no code blocks):
         try:
             clean_config_dir = _get_clean_config_dir()
             env = os.environ.copy()
+            env.pop("CLAUDECODE", None)
             if clean_config_dir is not None:
                 env["CLAUDE_CONFIG_DIR"] = str(clean_config_dir)
 
@@ -452,6 +454,7 @@ Return ONLY this JSON format (no markdown, no code blocks):
         try:
             clean_config_dir = _get_clean_config_dir()
             env = os.environ.copy()
+            env.pop("CLAUDECODE", None)
             if clean_config_dir is not None:
                 env["CLAUDE_CONFIG_DIR"] = str(clean_config_dir)
 
@@ -579,6 +582,7 @@ Return ONLY this JSON format (no markdown, no code blocks):
         try:
             clean_config_dir = _get_clean_config_dir()
             env = os.environ.copy()
+            env.pop("CLAUDECODE", None)
             if clean_config_dir is not None:
                 env["CLAUDE_CONFIG_DIR"] = str(clean_config_dir)
 
