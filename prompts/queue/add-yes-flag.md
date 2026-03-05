@@ -1,3 +1,7 @@
+---
+status: queued
+---
+
 <objective>
 Add a `--yes` / `-y` flag to auto-accept all interactive prompts, enabling non-interactive execution in CI/CD and dark-factory containers.
 </objective>
