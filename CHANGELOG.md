@@ -8,6 +8,10 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## v0.13.0
+
+- Add OSV vulnerability auto-fix: run `make osv-scanner` before precommit, parse vulnerable Go packages, and update them with `go get -u`
+
 ## v0.12.7
 
 - Remove auto-installed plugins and MCP configs from ~/.claude-clean on each use

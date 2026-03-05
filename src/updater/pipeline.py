@@ -31,8 +31,8 @@ from .git_operations import (
     git_push,
     git_tag_from_changelog,
 )
+from .go_updater import fix_osv_vulnerabilities, update_go_dependencies
 from .go_updater import run_precommit as run_go_precommit
-from .go_updater import update_go_dependencies
 from .gomod_excludes import apply_gomod_excludes_and_replaces
 from .log_manager import log_message
 from .prompts import prompt_yes_no
@@ -125,6 +125,16 @@ class GoDepSkipStep(Step):
         log_message("\n=== Phase 1c: Skip Dependency Updates ===", to_console=True)
         log_message("  → Updating Go version only (no dependency changes)", to_console=True)
         return StepResult(StepStatus.SKIP)
+
+
+class OsvFixStep(Step):
+    """Run OSV scanner and fix Go vulnerabilities before precommit."""
+
+    async def run(self, module_path: Path, context: dict[str, Any]) -> StepResult:
+        fixed = fix_osv_vulnerabilities(module_path, log_func=log_message)
+        context.setdefault("updates_made", False)
+        context["updates_made"] = context["updates_made"] or fixed
+        return StepResult(StepStatus.SUCCESS, {"fixed": fixed})
 
 
 class PythonVersionUpdateStep(Step):

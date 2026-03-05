@@ -1,5 +1,7 @@
 """Go dependency updater."""
 
+import re
+import subprocess
 from collections.abc import Callable
 from pathlib import Path
 
@@ -89,6 +91,75 @@ def update_go_dependencies(module_path: Path, log_func: Callable[..., None] = lo
     run_command("go mod vendor", cwd=module_path, quiet=True, log_func=log_func)
 
     log_func("\n✓ Go dependencies updated successfully", to_console=True)
+    return True
+
+
+def _has_makefile_target(module_path: Path, target: str) -> bool:
+    """Check if a Makefile target exists."""
+    makefile = module_path / "Makefile"
+    if not makefile.exists():
+        return False
+    content = makefile.read_text()
+    return bool(re.search(rf"^{re.escape(target)}\s*:", content, re.MULTILINE))
+
+
+def _parse_osv_go_packages(output: str) -> list[str]:
+    """Parse OSV scanner table output and return Go package names."""
+    packages = []
+    for line in output.split("\n"):
+        if not line.startswith("|"):
+            continue
+        cells = [c.strip() for c in line.split("|")]
+        # Table rows have: empty | OSV URL | CVSS | ECOSYSTEM | PACKAGE | VERSION | FIXED | SOURCE
+        if len(cells) < 8:
+            continue
+        ecosystem = cells[3]
+        package = cells[4]
+        if ecosystem == "Go" and package and package != "PACKAGE":
+            packages.append(package)
+    return packages
+
+
+def fix_osv_vulnerabilities(module_path: Path, log_func: Callable[..., None] = log_message) -> bool:
+    """Run OSV scanner and fix Go vulnerabilities if found.
+
+    Returns True if vulnerabilities were fixed.
+    """
+    if not _has_makefile_target(module_path, "osv-scanner"):
+        return False
+
+    log_func("\n=== Phase 1d: Fix OSV Vulnerabilities ===", to_console=True)
+
+    result = subprocess.run(
+        "make osv-scanner",
+        shell=True,
+        cwd=module_path,
+        capture_output=True,
+        text=True,
+    )
+
+    if result.returncode == 0:
+        log_func("✓ No vulnerabilities found", to_console=True)
+        return False
+
+    # Parse vulnerable Go packages from output
+    combined_output = (result.stdout or "") + "\n" + (result.stderr or "")
+    packages = _parse_osv_go_packages(combined_output)
+
+    if not packages:
+        log_func("✓ No fixable Go vulnerabilities found", to_console=True)
+        return False
+
+    log_func(f"→ Found {len(packages)} vulnerable Go package(s)", to_console=True)
+
+    for pkg in packages:
+        log_func(f"  → Updating {pkg}", to_console=True)
+        run_command(f"go get -u {pkg}", cwd=module_path, quiet=True, log_func=log_func)
+
+    run_command("go mod tidy", cwd=module_path, quiet=True, log_func=log_func)
+    run_command("go mod vendor", cwd=module_path, quiet=True, log_func=log_func)
+
+    log_func("✓ OSV vulnerabilities fixed", to_console=True)
     return True
 
 

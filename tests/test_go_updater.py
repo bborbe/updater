@@ -5,7 +5,13 @@ from unittest.mock import Mock, patch
 import pytest
 
 from updater import config
-from updater.go_updater import run_precommit, update_go_dependencies
+from updater.go_updater import (
+    _has_makefile_target,
+    _parse_osv_go_packages,
+    fix_osv_vulnerabilities,
+    run_precommit,
+    update_go_dependencies,
+)
 
 
 @pytest.fixture
@@ -293,3 +299,133 @@ class TestRunPrecommit:
         # Verify quiet parameter was set
         call_args = mock_run.call_args
         assert call_args[1]["quiet"] is True
+
+
+class TestHasMakefileTarget:
+    """Tests for _has_makefile_target function."""
+
+    def test_target_exists(self, tmp_path):
+        makefile = tmp_path / "Makefile"
+        makefile.write_text("build:\n\tgo build\n\nosv-scanner:\n\t@echo scan\n")
+        assert _has_makefile_target(tmp_path, "osv-scanner") is True
+
+    def test_target_missing(self, tmp_path):
+        makefile = tmp_path / "Makefile"
+        makefile.write_text("build:\n\tgo build\n")
+        assert _has_makefile_target(tmp_path, "osv-scanner") is False
+
+    def test_no_makefile(self, tmp_path):
+        assert _has_makefile_target(tmp_path, "osv-scanner") is False
+
+    def test_target_with_dependencies(self, tmp_path):
+        makefile = tmp_path / "Makefile"
+        makefile.write_text("osv-scanner: build\n\t@echo scan\n")
+        assert _has_makefile_target(tmp_path, "osv-scanner") is True
+
+
+class TestParseOsvGoPackages:
+    """Tests for _parse_osv_go_packages function."""
+
+    def test_single_vulnerability(self):
+        output = """\
+Total 1 package affected by 1 known vulnerability
++-------------------------------------+------+-----------+-----------------------+---------------------+---------------+--------+
+| OSV URL                             | CVSS | ECOSYSTEM | PACKAGE               | VERSION             | FIXED VERSION | SOURCE |
++-------------------------------------+------+-----------+-----------------------+---------------------+---------------+--------+
+| https://osv.dev/GHSA-p436-gjf2-799p | 7.0  | Go        | github.com/docker/cli | 28.3.3+incompatible | 29.2.0        | go.mod |
++-------------------------------------+------+-----------+-----------------------+---------------------+---------------+--------+
+"""
+        packages = _parse_osv_go_packages(output)
+        assert packages == ["github.com/docker/cli"]
+
+    def test_multiple_vulnerabilities(self):
+        output = """\
++------+------+-----------+---------------------------+---------+---------------+--------+
+| URL  | CVSS | ECOSYSTEM | PACKAGE                   | VERSION | FIXED VERSION | SOURCE |
++------+------+-----------+---------------------------+---------+---------------+--------+
+| url1 | 7.0  | Go        | github.com/docker/cli     | 28.3.3  | 29.2.0        | go.mod |
+| url2 | 5.0  | Go        | github.com/example/pkg    | 1.0.0   | 1.1.0         | go.mod |
++------+------+-----------+---------------------------+---------+---------------+--------+
+"""
+        packages = _parse_osv_go_packages(output)
+        assert packages == ["github.com/docker/cli", "github.com/example/pkg"]
+
+    def test_non_go_ecosystem_ignored(self):
+        output = """\
++------+------+-----------+------------------+---------+---------------+--------+
+| URL  | CVSS | ECOSYSTEM | PACKAGE          | VERSION | FIXED VERSION | SOURCE |
++------+------+-----------+------------------+---------+---------------+--------+
+| url1 | 7.0  | npm       | some-npm-package | 1.0.0   | 2.0.0         | yarn   |
++------+------+-----------+------------------+---------+---------------+--------+
+"""
+        packages = _parse_osv_go_packages(output)
+        assert packages == []
+
+    def test_no_table_in_output(self):
+        output = "No vulnerabilities found.\n"
+        packages = _parse_osv_go_packages(output)
+        assert packages == []
+
+    def test_header_row_excluded(self):
+        output = "| OSV URL | CVSS | ECOSYSTEM | PACKAGE | VERSION | FIXED VERSION | SOURCE |\n"
+        packages = _parse_osv_go_packages(output)
+        assert packages == []
+
+
+class TestFixOsvVulnerabilities:
+    """Tests for fix_osv_vulnerabilities function."""
+
+    def test_no_makefile_target(self, tmp_path):
+        makefile = tmp_path / "Makefile"
+        makefile.write_text("build:\n\tgo build\n")
+        result = fix_osv_vulnerabilities(tmp_path)
+        assert result is False
+
+    def test_no_vulnerabilities_found(self, tmp_path):
+        makefile = tmp_path / "Makefile"
+        makefile.write_text("osv-scanner:\n\t@echo scan\n")
+
+        with patch("updater.go_updater.subprocess.run") as mock_sub:
+            mock_sub.return_value = Mock(returncode=0, stdout="No vulnerabilities found", stderr="")
+            result = fix_osv_vulnerabilities(tmp_path)
+
+        assert result is False
+
+    def test_fixes_go_vulnerabilities(self, tmp_path):
+        makefile = tmp_path / "Makefile"
+        makefile.write_text("osv-scanner:\n\t@echo scan\n")
+
+        osv_output = """\
++------+------+-----------+-----------------------+---------+---------------+--------+
+| URL  | CVSS | ECOSYSTEM | PACKAGE               | VERSION | FIXED VERSION | SOURCE |
++------+------+-----------+-----------------------+---------+---------------+--------+
+| url1 | 7.0  | Go        | github.com/docker/cli | 28.3.3  | 29.2.0        | go.mod |
++------+------+-----------+-----------------------+---------+---------------+--------+
+"""
+
+        with (
+            patch("updater.go_updater.subprocess.run") as mock_sub,
+            patch("updater.go_updater.run_command") as mock_run,
+        ):
+            mock_sub.return_value = Mock(returncode=1, stdout=osv_output, stderr="")
+            mock_run.return_value = Mock(returncode=0, stdout="", stderr="")
+
+            result = fix_osv_vulnerabilities(tmp_path)
+
+        assert result is True
+        # Should call: go get -u, go mod tidy, go mod vendor
+        assert mock_run.call_count == 3
+        calls = [str(c) for c in mock_run.call_args_list]
+        assert any("go get -u github.com/docker/cli" in c for c in calls)
+        assert any("go mod tidy" in c for c in calls)
+        assert any("go mod vendor" in c for c in calls)
+
+    def test_no_go_packages_in_output(self, tmp_path):
+        makefile = tmp_path / "Makefile"
+        makefile.write_text("osv-scanner:\n\t@echo scan\n")
+
+        with patch("updater.go_updater.subprocess.run") as mock_sub:
+            mock_sub.return_value = Mock(returncode=1, stdout="some error", stderr="")
+            result = fix_osv_vulnerabilities(tmp_path)
+
+        assert result is False
