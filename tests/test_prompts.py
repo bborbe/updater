@@ -43,7 +43,9 @@ class TestPromptYesNoYesMode:
 
     def test_does_not_call_input_when_yes_mode(self, monkeypatch):
         config.YES_MODE = True
-        monkeypatch.setattr("builtins.input", lambda _: (_ for _ in ()).throw(RuntimeError("input() called")))
+        monkeypatch.setattr(
+            "builtins.input", lambda _: (_ for _ in ()).throw(RuntimeError("input() called"))
+        )
         # Should not raise
         result = prompt_yes_no("Continue?", default_yes=True)
         assert result is True
@@ -66,7 +68,9 @@ class TestPromptSkipOrRetryYesMode:
 
     def test_does_not_call_input_when_yes_mode(self, monkeypatch):
         config.YES_MODE = True
-        monkeypatch.setattr("builtins.input", lambda _: (_ for _ in ()).throw(RuntimeError("input() called")))
+        monkeypatch.setattr(
+            "builtins.input", lambda _: (_ for _ in ()).throw(RuntimeError("input() called"))
+        )
         result = prompt_skip_or_retry("Skip or Retry?")
         assert result == "retry"
 
@@ -76,10 +80,10 @@ class TestPromptYesNoInteractive:
 
     def test_default_yes_on_empty_input(self, monkeypatch):
         config.YES_MODE = False
+        monkeypatch.setattr("updater.prompts.play_interaction_sound", lambda: None)
         monkeypatch.setattr("builtins.input", lambda _: "")
-        with pytest.raises(Exception):
-            # play_interaction_sound may fail in test env; that's fine
-            pass
+        result = prompt_yes_no("Continue?", default_yes=True)
+        assert result is True
 
     def test_yes_mode_false_does_not_auto_accept(self, monkeypatch):
         config.YES_MODE = False

@@ -8,6 +8,10 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## v0.14.0
+
+- Add `--yes` / `-y` flag for non-interactive mode (auto-accepts all prompts)
+
 ## v0.13.1
 
 - Fix nested session error when running update-all inside Claude Code by unsetting CLAUDECODE env var before ClaudeSDKClient calls

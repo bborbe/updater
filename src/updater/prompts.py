@@ -1,5 +1,6 @@
 """User input prompts."""
 
+from . import config
 from .sound import play_interaction_sound
 
 
@@ -19,6 +20,11 @@ def prompt_yes_no(message: str, default_yes: bool = True) -> bool:
     - n/no: no
     - Ctrl+C: exits immediately
     """
+    if config.YES_MODE:
+        answer = "yes" if default_yes else "no"
+        print(f"{message} [auto-accepted: {answer}]")
+        return default_yes
+
     play_interaction_sound()
     prompt = f"{message} [{'Y/n' if default_yes else 'y/N'}]: "
     response = input(prompt).strip().lower()
@@ -46,6 +52,10 @@ def prompt_skip_or_retry(message: str = "Skip or Retry?") -> str:
     - r/retry/Enter: retry this module (default)
     - Ctrl+C: exits immediately
     """
+    if config.YES_MODE:
+        print(f"{message} [auto-accepted: retry]")
+        return "retry"
+
     play_interaction_sound()
     prompt = f"{message} [s/R]: "
     response = input(prompt).strip().lower()

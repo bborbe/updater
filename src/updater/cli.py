@@ -326,6 +326,12 @@ async def main_async() -> int:
         action="store_true",
         help="Add changes to ## Unreleased instead of creating version/tag (useful for PRs)",
     )
+    parser.add_argument(
+        "--yes",
+        "-y",
+        action="store_true",
+        help="Auto-accept all prompts (non-interactive mode, for CI/containers)",
+    )
 
     args = parser.parse_args()
 
@@ -334,6 +340,7 @@ async def main_async() -> int:
     config.MODEL = args.model
     config.REQUIRE_CONFIRM = args.require_commit_confirm
     config.NO_TAG = args.no_tag
+    config.YES_MODE = args.yes
     config.RUN_TIMESTAMP = datetime.now().strftime("%Y-%m-%d-%H%M%S")
 
     # Step 0: Verify Claude authentication
@@ -610,11 +617,18 @@ async def main_go_async() -> int:
         action="store_true",
         help="Require user confirmation before committing",
     )
+    parser.add_argument(
+        "--yes",
+        "-y",
+        action="store_true",
+        help="Auto-accept all prompts (non-interactive mode, for CI/containers)",
+    )
 
     args = parser.parse_args()
     config.VERBOSE_MODE = args.verbose
     config.MODEL = args.model
     config.REQUIRE_CONFIRM = args.require_commit_confirm
+    config.YES_MODE = args.yes
     config.RUN_TIMESTAMP = datetime.now().strftime("%Y-%m-%d-%H%M%S")
 
     # Discover Go modules only
@@ -683,11 +697,18 @@ async def main_go_only_async() -> int:
         action="store_true",
         help="Require user confirmation before committing",
     )
+    parser.add_argument(
+        "--yes",
+        "-y",
+        action="store_true",
+        help="Auto-accept all prompts (non-interactive mode, for CI/containers)",
+    )
 
     args = parser.parse_args()
     config.VERBOSE_MODE = args.verbose
     config.MODEL = args.model
     config.REQUIRE_CONFIRM = args.require_commit_confirm
+    config.YES_MODE = args.yes
     config.RUN_TIMESTAMP = datetime.now().strftime("%Y-%m-%d-%H%M%S")
 
     # Discover Go modules only
@@ -756,11 +777,18 @@ async def main_go_with_deps_async() -> int:
         action="store_true",
         help="Require user confirmation before committing",
     )
+    parser.add_argument(
+        "--yes",
+        "-y",
+        action="store_true",
+        help="Auto-accept all prompts (non-interactive mode, for CI/containers)",
+    )
 
     args = parser.parse_args()
     config.VERBOSE_MODE = args.verbose
     config.MODEL = args.model
     config.REQUIRE_CONFIRM = args.require_commit_confirm
+    config.YES_MODE = args.yes
     config.RUN_TIMESTAMP = datetime.now().strftime("%Y-%m-%d-%H%M%S")
 
     # Discover Go modules only
@@ -831,11 +859,18 @@ async def main_python_async() -> int:
         action="store_true",
         help="Require user confirmation before committing",
     )
+    parser.add_argument(
+        "--yes",
+        "-y",
+        action="store_true",
+        help="Auto-accept all prompts (non-interactive mode, for CI/containers)",
+    )
 
     args = parser.parse_args()
     config.VERBOSE_MODE = args.verbose
     config.MODEL = args.model
     config.REQUIRE_CONFIRM = args.require_commit_confirm
+    config.YES_MODE = args.yes
     config.RUN_TIMESTAMP = datetime.now().strftime("%Y-%m-%d-%H%M%S")
 
     # Discover Python modules only
@@ -1084,12 +1119,19 @@ async def main_release_async() -> int:
         action="store_true",
         help="Require user confirmation before releasing",
     )
+    parser.add_argument(
+        "--yes",
+        "-y",
+        action="store_true",
+        help="Auto-accept all prompts (non-interactive mode, for CI/containers)",
+    )
 
     args = parser.parse_args()
 
     config.VERBOSE_MODE = args.verbose
     config.MODEL = args.model
     config.REQUIRE_CONFIRM = args.require_commit_confirm
+    config.YES_MODE = args.yes
     config.RUN_TIMESTAMP = datetime.now().strftime("%Y-%m-%d-%H%M%S")
 
     # Step 0: Verify Claude authentication
