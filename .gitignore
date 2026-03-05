@@ -49,3 +49,7 @@ env/
 /.mcp-*
 /.update-logs/
 /CLAUDE.md
+
+# Dark Factory
+/.dark-factory.lock
+/prompts/log
