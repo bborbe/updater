@@ -1,3 +1,6 @@
+---
+status: queued
+---
 <objective>
 Add a max retry limit to `process_module_with_retry` and `process_release_with_retry` in `src/updater/cli.py`.
 Currently, when `-y` / `--yes` flag is set (YES_MODE), these functions retry forever on failure because `prompt_skip_or_retry()` always returns "retry". This causes infinite loops when a module consistently fails.
@@ -16,7 +19,7 @@ Read `src/updater/config.py` to understand YES_MODE.
 3. In both functions: after a failure, if `config.YES_MODE` is True AND `attempt >= max_retries`, print a clear message and return `(False, "skipped")` WITHOUT calling `prompt_skip_or_retry()`. Example message:
    ```
    ✗ Module /path/to/module failed
-     → Max retries (3) reached in -y mode, skipping
+     -> Max retries (3) reached in -y mode, skipping
    ⚠ Skipping /path/to/module
    ```
 4. In interactive mode (YES_MODE = False), behavior is unchanged: prompt forever until user chooses skip.
