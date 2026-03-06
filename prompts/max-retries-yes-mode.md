@@ -1,5 +1,5 @@
 ---
-status: queued
+status: draft
 ---
 <objective>
 Add a max retry limit to `process_module_with_retry` and `process_release_with_retry` in `src/updater/cli.py`.
