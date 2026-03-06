@@ -8,6 +8,10 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## v0.14.1
+
+- Disable project-level MCP server loading in Claude SDK calls
+
 ## v0.14.0
 
 - Add `--yes` / `-y` flag for non-interactive mode (auto-accepts all prompts)

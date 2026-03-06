@@ -184,6 +184,7 @@ async def _verify_claude_auth_impl() -> tuple[bool, str]:
     options = ClaudeCodeOptions(
         model=config.MODEL,
         env=env,
+        extra_args={"strict-mcp-config": None},
     )
 
     # Retry logic for timeout errors
@@ -315,6 +316,7 @@ Return ONLY this JSON format (no markdown, no code blocks):
             options = ClaudeCodeOptions(
                 model=config.MODEL,
                 env=env,
+                extra_args={"strict-mcp-config": None},
             )
 
             response_text = ""
@@ -461,6 +463,7 @@ Return ONLY this JSON format (no markdown, no code blocks):
             options = ClaudeCodeOptions(
                 model=config.MODEL,
                 env=env,
+                extra_args={"strict-mcp-config": None},
             )
 
             response_text = ""
@@ -589,6 +592,7 @@ Return ONLY this JSON format (no markdown, no code blocks):
             options = ClaudeCodeOptions(
                 model=config.MODEL,
                 env=env,
+                extra_args={"strict-mcp-config": None},
             )
 
             response_text = ""

@@ -306,6 +306,28 @@ class TestAnalyzeChangesWithClaude:
             assert call_args[1]["options"].model == "haiku"
 
     @pytest.mark.asyncio
+    async def test_strict_mcp_config_flag(self, mock_module_path, reset_config):
+        """Test that --strict-mcp-config is set to disable project-level MCP servers."""
+        mock_response = {
+            "version_bump": "patch",
+            "changelog": ["update deps"],
+            "commit_message": "update deps",
+        }
+
+        mock_client = create_mock_client(json.dumps(mock_response))
+
+        with (
+            patch("updater.claude_analyzer.ClaudeSDKClient", return_value=mock_client) as mock_sdk,
+            patch("asyncio.sleep", new_callable=AsyncMock),
+        ):
+            await analyze_changes_with_claude(mock_module_path)
+
+            call_args = mock_sdk.call_args
+            options = call_args[1]["options"]
+            assert "strict-mcp-config" in options.extra_args
+            assert options.extra_args["strict-mcp-config"] is None
+
+    @pytest.mark.asyncio
     async def test_clean_config_dir_not_created_if_missing(
         self, mock_module_path, reset_config, tmp_path
     ):
