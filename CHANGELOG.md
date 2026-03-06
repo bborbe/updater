@@ -8,6 +8,10 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## v0.14.4
+
+- migrate dark-factory config to nested format, rename prompts/queue to prompts/in-progress
+
 ## v0.14.3
 
 - 003-max-retries-yes-mode
