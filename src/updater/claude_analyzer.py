@@ -5,7 +5,8 @@ import json
 import os
 import shutil
 import subprocess
-from collections.abc import Callable
+from collections.abc import Callable, Generator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
@@ -23,6 +24,17 @@ from .log_manager import log_message
 # Limits to prevent buffer overflow in Claude SDK (1MB limit)
 MAX_DIFF_PER_FILE = 50_000  # 50KB per file
 MAX_TOTAL_DIFF = 200_000  # 200KB total
+
+
+@contextmanager
+def _without_claudecode() -> Generator[None]:
+    """Temporarily remove CLAUDECODE from os.environ to allow nested Claude invocation."""
+    value = os.environ.pop("CLAUDECODE", None)
+    try:
+        yield
+    finally:
+        if value is not None:
+            os.environ["CLAUDECODE"] = value
 
 
 def _run_git_command(args: list[str], cwd: Path) -> str:
@@ -176,32 +188,32 @@ async def _verify_claude_auth_impl() -> tuple[bool, str]:
     """Implementation of Claude authentication verification."""
     clean_config_dir = _get_clean_config_dir()
 
-    env = os.environ.copy()
-    env.pop("CLAUDECODE", None)
-    if clean_config_dir is not None:
-        env["CLAUDE_CONFIG_DIR"] = str(clean_config_dir)
-
-    options = ClaudeCodeOptions(
-        model=config.MODEL,
-        env=env,
-        extra_args={"strict-mcp-config": None},
-    )
-
     # Retry logic for timeout errors
     max_retries = 3
     retry_delays = [2, 5, 10]  # seconds - exponential backoff
 
     for attempt in range(max_retries):
         try:
-            async with ClaudeSDKClient(options=options) as client:
-                await client.query("Reply with exactly: ok")
+            with _without_claudecode():
+                env = os.environ.copy()
+                if clean_config_dir is not None:
+                    env["CLAUDE_CONFIG_DIR"] = str(clean_config_dir)
 
-                async for message in client.receive_response():
-                    if isinstance(message, AssistantMessage):
-                        for block in message.content:
-                            if isinstance(block, TextBlock):
-                                # Got a response, auth works
-                                return True, ""
+                options = ClaudeCodeOptions(
+                    model=config.MODEL,
+                    env=env,
+                    extra_args={"strict-mcp-config": None},
+                )
+
+                async with ClaudeSDKClient(options=options) as client:
+                    await client.query("Reply with exactly: ok")
+
+                    async for message in client.receive_response():
+                        if isinstance(message, AssistantMessage):
+                            for block in message.content:
+                                if isinstance(block, TextBlock):
+                                    # Got a response, auth works
+                                    return True, ""
 
             return True, ""
         except Exception as e:
@@ -308,28 +320,28 @@ Return ONLY this JSON format (no markdown, no code blocks):
     for attempt in range(max_retries):
         try:
             clean_config_dir = _get_clean_config_dir()
-            env = os.environ.copy()
-            env.pop("CLAUDECODE", None)
-            if clean_config_dir is not None:
-                env["CLAUDE_CONFIG_DIR"] = str(clean_config_dir)
+            with _without_claudecode():
+                env = os.environ.copy()
+                if clean_config_dir is not None:
+                    env["CLAUDE_CONFIG_DIR"] = str(clean_config_dir)
 
-            options = ClaudeCodeOptions(
-                model=config.MODEL,
-                env=env,
-                extra_args={"strict-mcp-config": None},
-            )
+                options = ClaudeCodeOptions(
+                    model=config.MODEL,
+                    env=env,
+                    extra_args={"strict-mcp-config": None},
+                )
 
-            response_text = ""
+                response_text = ""
 
-            # Create new client for clean session per module
-            async with ClaudeSDKClient(options=options) as client:
-                await client.query(prompt)
+                # Create new client for clean session per module
+                async with ClaudeSDKClient(options=options) as client:
+                    await client.query(prompt)
 
-                async for message in client.receive_response():
-                    if isinstance(message, AssistantMessage):
-                        for block in message.content:
-                            if isinstance(block, TextBlock):
-                                response_text += block.text
+                    async for message in client.receive_response():
+                        if isinstance(message, AssistantMessage):
+                            for block in message.content:
+                                if isinstance(block, TextBlock):
+                                    response_text += block.text
 
             # Parse JSON response
             # Extract JSON from response (handle markdown code blocks and plain text)
@@ -455,27 +467,27 @@ Return ONLY this JSON format (no markdown, no code blocks):
     for attempt in range(max_retries):
         try:
             clean_config_dir = _get_clean_config_dir()
-            env = os.environ.copy()
-            env.pop("CLAUDECODE", None)
-            if clean_config_dir is not None:
-                env["CLAUDE_CONFIG_DIR"] = str(clean_config_dir)
+            with _without_claudecode():
+                env = os.environ.copy()
+                if clean_config_dir is not None:
+                    env["CLAUDE_CONFIG_DIR"] = str(clean_config_dir)
 
-            options = ClaudeCodeOptions(
-                model=config.MODEL,
-                env=env,
-                extra_args={"strict-mcp-config": None},
-            )
+                options = ClaudeCodeOptions(
+                    model=config.MODEL,
+                    env=env,
+                    extra_args={"strict-mcp-config": None},
+                )
 
-            response_text = ""
+                response_text = ""
 
-            async with ClaudeSDKClient(options=options) as client:
-                await client.query(prompt)
+                async with ClaudeSDKClient(options=options) as client:
+                    await client.query(prompt)
 
-                async for message in client.receive_response():
-                    if isinstance(message, AssistantMessage):
-                        for block in message.content:
-                            if isinstance(block, TextBlock):
-                                response_text += block.text
+                    async for message in client.receive_response():
+                        if isinstance(message, AssistantMessage):
+                            for block in message.content:
+                                if isinstance(block, TextBlock):
+                                    response_text += block.text
 
             # Parse JSON response
             if "```json" in response_text:
@@ -584,27 +596,27 @@ Return ONLY this JSON format (no markdown, no code blocks):
     for attempt in range(max_retries):
         try:
             clean_config_dir = _get_clean_config_dir()
-            env = os.environ.copy()
-            env.pop("CLAUDECODE", None)
-            if clean_config_dir is not None:
-                env["CLAUDE_CONFIG_DIR"] = str(clean_config_dir)
+            with _without_claudecode():
+                env = os.environ.copy()
+                if clean_config_dir is not None:
+                    env["CLAUDE_CONFIG_DIR"] = str(clean_config_dir)
 
-            options = ClaudeCodeOptions(
-                model=config.MODEL,
-                env=env,
-                extra_args={"strict-mcp-config": None},
-            )
+                options = ClaudeCodeOptions(
+                    model=config.MODEL,
+                    env=env,
+                    extra_args={"strict-mcp-config": None},
+                )
 
-            response_text = ""
+                response_text = ""
 
-            async with ClaudeSDKClient(options=options) as client:
-                await client.query(prompt)
+                async with ClaudeSDKClient(options=options) as client:
+                    await client.query(prompt)
 
-                async for message in client.receive_response():
-                    if isinstance(message, AssistantMessage):
-                        for block in message.content:
-                            if isinstance(block, TextBlock):
-                                response_text += block.text
+                    async for message in client.receive_response():
+                        if isinstance(message, AssistantMessage):
+                            for block in message.content:
+                                if isinstance(block, TextBlock):
+                                    response_text += block.text
 
             # Parse JSON response
             if "```json" in response_text:

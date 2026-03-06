@@ -8,6 +8,11 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## v0.14.2
+
+- Fix nested Claude invocation by removing CLAUDECODE from os.environ directly (not just from copy) using _without_claudecode() context manager
+- Add tests for _without_claudecode context manager
+
 ## v0.14.1
 
 - Disable project-level MCP server loading in Claude SDK calls

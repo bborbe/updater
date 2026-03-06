@@ -1,6 +1,7 @@
 """Tests for Claude integration and analysis."""
 
 import json
+import os
 from pathlib import Path
 from unittest.mock import AsyncMock, Mock, patch
 
@@ -8,6 +9,7 @@ import pytest
 
 from updater import config
 from updater.claude_analyzer import (
+    _without_claudecode,
     analyze_changes_with_claude,
     generate_changelog_from_commits,
     verify_claude_auth,
@@ -534,3 +536,44 @@ class TestGenerateChangelogFromCommits:
             )
 
         assert result == []
+
+
+class TestWithoutClaudecode:
+    """Tests for _without_claudecode context manager."""
+
+    def test_removes_claudecode_inside_block(self):
+        """CLAUDECODE is absent from os.environ inside the context manager."""
+        os.environ["CLAUDECODE"] = "1"
+        try:
+            with _without_claudecode():
+                assert "CLAUDECODE" not in os.environ
+            assert os.environ.get("CLAUDECODE") == "1"
+        finally:
+            os.environ.pop("CLAUDECODE", None)
+
+    def test_restores_claudecode_after_exception(self):
+        """CLAUDECODE is restored even when an exception is raised inside the block."""
+        os.environ["CLAUDECODE"] = "1"
+        try:
+            try:
+                with _without_claudecode():
+                    raise RuntimeError("test")
+            except RuntimeError:
+                pass
+            assert os.environ.get("CLAUDECODE") == "1"
+        finally:
+            os.environ.pop("CLAUDECODE", None)
+
+    def test_works_when_claudecode_not_set(self):
+        """Works correctly when CLAUDECODE is not set."""
+        os.environ.pop("CLAUDECODE", None)
+        with _without_claudecode():
+            assert "CLAUDECODE" not in os.environ
+        assert "CLAUDECODE" not in os.environ
+
+    def test_does_not_introduce_claudecode(self):
+        """CLAUDECODE is not added to os.environ if it wasn't there before."""
+        os.environ.pop("CLAUDECODE", None)
+        with _without_claudecode():
+            pass
+        assert "CLAUDECODE" not in os.environ
