@@ -391,6 +391,75 @@ class TestProcessModuleWithRetry:
         assert success is True
         assert status == "updated"
 
+    @pytest.mark.asyncio
+    async def test_yes_mode_auto_skip_after_max_retries(self, mock_module_path):
+        """Test YES_MODE auto-skips after max_retries failures."""
+        config.YES_MODE = True
+        try:
+            with (
+                patch(
+                    "updater.cli.process_single_go_module",
+                    new_callable=AsyncMock,
+                    return_value=(False, "failed"),
+                ),
+                patch("updater.cli.play_error_sound"),
+                patch("builtins.print"),
+            ):
+                success, status = await process_module_with_retry(mock_module_path, max_retries=3)
+        finally:
+            config.YES_MODE = False
+
+        assert success is False
+        assert status == "skipped"
+
+    @pytest.mark.asyncio
+    async def test_yes_mode_succeeds_before_max_retries(self, mock_module_path):
+        """Test YES_MODE succeeds on retry before hitting limit."""
+        config.YES_MODE = True
+        try:
+            with (
+                patch(
+                    "updater.cli.process_single_go_module",
+                    new_callable=AsyncMock,
+                    side_effect=[(False, "failed"), (True, "updated")],
+                ),
+                patch("updater.cli.play_error_sound"),
+                patch("builtins.print"),
+            ):
+                success, status = await process_module_with_retry(mock_module_path, max_retries=3)
+        finally:
+            config.YES_MODE = False
+
+        assert success is True
+        assert status == "updated"
+
+    @pytest.mark.asyncio
+    async def test_interactive_mode_prompts_past_max_retries(self, mock_module_path):
+        """Test interactive mode prompts regardless of attempt count (no auto-skip)."""
+        config.YES_MODE = False
+        with (
+            patch(
+                "updater.cli.process_single_go_module",
+                new_callable=AsyncMock,
+                side_effect=[
+                    (False, "failed"),
+                    (False, "failed"),
+                    (False, "failed"),
+                    (False, "failed"),
+                ],
+            ),
+            patch(
+                "updater.cli.prompt_skip_or_retry",
+                side_effect=["retry", "retry", "retry", "skip"],
+            ),
+            patch("updater.cli.play_error_sound"),
+            patch("builtins.print"),
+        ):
+            success, status = await process_module_with_retry(mock_module_path, max_retries=3)
+
+        assert success is False
+        assert status == "skipped"
+
 
 class TestMainAsync:
     """Tests for main_async function."""

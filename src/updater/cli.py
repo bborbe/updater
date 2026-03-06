@@ -227,7 +227,10 @@ async def process_single_python_module(module_path: Path) -> tuple[bool, str]:
 
 
 async def process_module_with_retry(
-    module_path: Path, project_type: str = "go", update_deps: bool = True
+    module_path: Path,
+    project_type: str = "go",
+    update_deps: bool = True,
+    max_retries: int = 3,
 ) -> tuple[bool, str]:
     """Process a single module with retry on failure.
 
@@ -235,6 +238,7 @@ async def process_module_with_retry(
         module_path: Path to the module
         project_type: Type of project ("go", "python", or "docker")
         update_deps: Whether to update dependencies for Go modules (default: True)
+        max_retries: Maximum retry attempts in YES_MODE before auto-skipping (default: 3)
 
     Returns:
         Tuple of (success: bool, status: str)
@@ -273,6 +277,13 @@ async def process_module_with_retry(
         # Failed - prompt for skip or retry
         play_error_sound()
         print(f"\n✗ Module {module_path} failed")
+
+        # In YES_MODE, auto-skip after max_retries attempts
+        if config.YES_MODE and attempt >= max_retries:
+            print(f"  → Max retries ({max_retries}) reached in -y mode, skipping")
+            print(f"⚠ Skipping {module_path}\n")
+            return False, "skipped"
+
         print("  → Fix the issues and retry, or skip this module")
 
         choice = prompt_skip_or_retry()
@@ -1052,11 +1063,12 @@ async def process_release_module(module_path: Path) -> tuple[bool, str]:
         cleanup_old_logs(module_path)
 
 
-async def process_release_with_retry(module_path: Path) -> tuple[bool, str]:
+async def process_release_with_retry(module_path: Path, max_retries: int = 3) -> tuple[bool, str]:
     """Process a release module with retry on failure.
 
     Args:
         module_path: Path to the module
+        max_retries: Maximum retry attempts in YES_MODE before auto-skipping (default: 3)
 
     Returns:
         Tuple of (success: bool, status: str)
@@ -1074,6 +1086,13 @@ async def process_release_with_retry(module_path: Path) -> tuple[bool, str]:
 
         play_error_sound()
         print(f"\n✗ Release failed for {module_path}")
+
+        # In YES_MODE, auto-skip after max_retries attempts
+        if config.YES_MODE and attempt >= max_retries:
+            print(f"  → Max retries ({max_retries}) reached in -y mode, skipping")
+            print(f"⚠ Skipping {module_path}\n")
+            return False, "skipped"
+
         print("  → Fix the issues and retry, or skip this module")
 
         choice = prompt_skip_or_retry()
