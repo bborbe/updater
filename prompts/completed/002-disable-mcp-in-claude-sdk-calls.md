@@ -1,6 +1,12 @@
 ---
-status: queued
+status: completed
+summary: 'Added extra_args={"strict-mcp-config": None} to all 4 ClaudeCodeOptions calls in claude_analyzer.py, added a test verifying the flag is set, and added an Unreleased CHANGELOG entry.'
+container: updater-002-disable-mcp-in-claude-sdk-calls
+dark-factory-version: v0.17.12
 created: "2026-03-06T09:00:00Z"
+queued: "2026-03-06T08:03:46Z"
+started: "2026-03-06T08:03:46Z"
+completed: "2026-03-06T08:06:13Z"
 ---
 
 <objective>
