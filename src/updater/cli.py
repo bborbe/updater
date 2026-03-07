@@ -4,6 +4,7 @@ import argparse
 import asyncio
 import traceback
 from datetime import datetime
+from importlib.metadata import version as pkg_version
 from pathlib import Path
 
 from . import config
@@ -317,6 +318,11 @@ async def main_async() -> int:
         help="Show full command output (default: quiet with logs in .update-logs/)",
     )
     parser.add_argument(
+        "--version",
+        action="version",
+        version=f"%(prog)s {pkg_version('dependency-updater')}",
+    )
+    parser.add_argument(
         "--model",
         choices=["sonnet", "opus", "haiku"],
         default="sonnet",
@@ -622,6 +628,11 @@ async def main_go_async() -> int:
     )
     parser.add_argument("--verbose", action="store_true", help="Show full command output")
     parser.add_argument(
+        "--version",
+        action="version",
+        version=f"%(prog)s {pkg_version('dependency-updater')}",
+    )
+    parser.add_argument(
         "--model",
         choices=["sonnet", "opus", "haiku"],
         default="sonnet",
@@ -702,6 +713,11 @@ async def main_go_only_async() -> int:
     )
     parser.add_argument("--verbose", action="store_true", help="Show full command output")
     parser.add_argument(
+        "--version",
+        action="version",
+        version=f"%(prog)s {pkg_version('dependency-updater')}",
+    )
+    parser.add_argument(
         "--model",
         choices=["sonnet", "opus", "haiku"],
         default="sonnet",
@@ -781,6 +797,11 @@ async def main_go_with_deps_async() -> int:
         help="Path(s) to Go module(s) or parent directories (default: current directory)",
     )
     parser.add_argument("--verbose", action="store_true", help="Show full command output")
+    parser.add_argument(
+        "--version",
+        action="version",
+        version=f"%(prog)s {pkg_version('dependency-updater')}",
+    )
     parser.add_argument(
         "--model",
         choices=["sonnet", "opus", "haiku"],
@@ -863,6 +884,11 @@ async def main_python_async() -> int:
         help="Path(s) to Python module(s) or parent directories (default: current directory)",
     )
     parser.add_argument("--verbose", action="store_true", help="Show full command output")
+    parser.add_argument(
+        "--version",
+        action="version",
+        version=f"%(prog)s {pkg_version('dependency-updater')}",
+    )
     parser.add_argument(
         "--model",
         choices=["sonnet", "opus", "haiku"],
@@ -954,6 +980,11 @@ async def main_docker_async() -> int:
         help="Path(s) to directories containing Dockerfile (default: current directory)",
     )
     parser.add_argument("--verbose", action="store_true", help="Show full command output")
+    parser.add_argument(
+        "--version",
+        action="version",
+        version=f"%(prog)s {pkg_version('dependency-updater')}",
+    )
 
     args = parser.parse_args()
     config.VERBOSE_MODE = args.verbose
@@ -1130,6 +1161,11 @@ async def main_release_async() -> int:
         "--verbose",
         action="store_true",
         help="Show full command output",
+    )
+    parser.add_argument(
+        "--version",
+        action="version",
+        version=f"%(prog)s {pkg_version('dependency-updater')}",
     )
     parser.add_argument(
         "--model",
