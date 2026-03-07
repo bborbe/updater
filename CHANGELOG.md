@@ -8,6 +8,10 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## v0.15.1
+
+- use hatch-vcs for dynamic versioning from git tags
+
 ## v0.15.0
 
 - feat: Add --version flag to all 7 CLI entry points using importlib.metadata for runtime version lookup

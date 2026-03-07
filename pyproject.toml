@@ -1,10 +1,10 @@
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling", "hatch-vcs"]
 build-backend = "hatchling.build"
 
 [project]
 name = "dependency-updater"
-version = "0.1.0"
+dynamic = ["version"]
 description = "Multi-language dependency updater with Claude-powered CHANGELOG and commit messages (Go, Python, Node, etc.)"
 readme = "README.md"
 requires-python = ">=3.14"
@@ -38,6 +38,9 @@ release-only = "updater.cli:main_release"
 
 [tool.uv]
 package = true
+
+[tool.hatch.version]
+source = "vcs"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/updater"]
