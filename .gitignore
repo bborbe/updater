@@ -53,3 +53,4 @@ env/
 # Dark Factory
 /.dark-factory.lock
 /prompts/log
+/specs/log
