@@ -1,3 +1,13 @@
+---
+status: completed
+summary: Added --version flag to all 7 CLI entry points in src/updater/cli.py using importlib.metadata for runtime version lookup from installed package metadata.
+container: updater-005-add-version-flag
+dark-factory-version: v0.20.6
+created: "2026-03-07T10:45:42Z"
+queued: "2026-03-07T10:45:42Z"
+started: "2026-03-07T10:45:42Z"
+completed: "2026-03-07T10:47:58Z"
+---
 <objective>
 Add `--version` flag to all CLI entry points in src/updater/cli.py so users can check the installed version without running an update.
 </objective>
