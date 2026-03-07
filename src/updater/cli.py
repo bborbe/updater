@@ -354,9 +354,13 @@ async def main_async() -> int:
     config.YES_MODE = args.yes
     config.RUN_TIMESTAMP = datetime.now().strftime("%Y-%m-%d-%H%M%S")
 
+    # Setup early logging before auth so failures are diagnosable
+    setup_module_logging(Path.cwd())
+
     # Step 0: Verify Claude authentication
     print("=== Step 0: Verify Claude Authentication ===\n")
     auth_ok, auth_error = await verify_claude_auth()
+    close_module_logging()
     if not auth_ok:
         print(f"✗ {auth_error}")
         play_completion_sound()

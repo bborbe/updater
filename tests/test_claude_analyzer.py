@@ -463,12 +463,32 @@ class TestVerifyClaudeAuth:
         mock_client.__aenter__ = AsyncMock(side_effect=Exception("Network timeout"))
         mock_client.__aexit__ = AsyncMock()
 
-        with patch("updater.claude_analyzer.ClaudeSDKClient", return_value=mock_client):
+        with (
+            patch("updater.claude_analyzer.ClaudeSDKClient", return_value=mock_client),
+            patch("asyncio.sleep", new_callable=AsyncMock),
+        ):
             success, error = await verify_claude_auth()
 
         assert success is False
         assert "Claude check failed" in error
         assert "Network timeout" in error
+
+    @pytest.mark.asyncio
+    async def test_auth_times_out_after_30_seconds(self, reset_config):
+        """Test that asyncio.TimeoutError from wait_for is treated as retryable and exhausts retries."""
+
+        async def mock_wait_for(coro, *, timeout):
+            coro.close()  # Prevent unawaited-coroutine warning
+            raise TimeoutError()
+
+        with (
+            patch("asyncio.wait_for", side_effect=mock_wait_for),
+            patch("asyncio.sleep", new_callable=AsyncMock),
+        ):
+            success, error = await verify_claude_auth()
+
+        assert success is False
+        assert "failed" in error.lower()
 
 
 class TestGenerateChangelogFromCommits:

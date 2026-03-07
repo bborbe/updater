@@ -8,6 +8,11 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## v0.14.5
+
+- fix: Add 30-second hard timeout to Claude auth verification via asyncio.wait_for to prevent indefinite hangs
+- fix: Move setup_module_logging before verify_claude_auth in main_async so a log file always exists if auth hangs or fails
+
 ## v0.14.4
 
 - migrate dark-factory config to nested format, rename prompts/queue to prompts/in-progress

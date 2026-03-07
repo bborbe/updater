@@ -205,15 +205,17 @@ async def _verify_claude_auth_impl() -> tuple[bool, str]:
                     extra_args={"strict-mcp-config": None},
                 )
 
-                async with ClaudeSDKClient(options=options) as client:
-                    await client.query("Reply with exactly: ok")
+                async def _do_auth_check(opts: ClaudeCodeOptions) -> bool:
+                    async with ClaudeSDKClient(options=opts) as client:
+                        await client.query("Reply with exactly: ok")
+                        async for message in client.receive_response():
+                            if isinstance(message, AssistantMessage):
+                                for block in message.content:
+                                    if isinstance(block, TextBlock):
+                                        return True
+                    return True
 
-                    async for message in client.receive_response():
-                        if isinstance(message, AssistantMessage):
-                            for block in message.content:
-                                if isinstance(block, TextBlock):
-                                    # Got a response, auth works
-                                    return True, ""
+                await asyncio.wait_for(_do_auth_check(options), timeout=30)
 
             return True, ""
         except Exception as e:
@@ -228,7 +230,7 @@ async def _verify_claude_auth_impl() -> tuple[bool, str]:
                 )
 
             # Check if it's a timeout or connection error worth retrying
-            is_retryable = any(
+            is_retryable = isinstance(e, asyncio.TimeoutError) or any(
                 keyword in error_str.lower()
                 for keyword in ["timeout", "control request", "connection", "initialize"]
             )

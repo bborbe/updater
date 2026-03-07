@@ -708,6 +708,41 @@ class TestMainAsync:
         assert exit_code == 0
 
     @pytest.mark.asyncio
+    async def test_log_file_created_before_auth(self, mock_module_path, reset_config):
+        """Test that setup_module_logging is called before verify_claude_auth."""
+        call_order = []
+
+        def mock_setup_logging(path):
+            call_order.append("setup_logging")
+            return None
+
+        async def mock_auth():
+            call_order.append("verify_auth")
+            return (True, "")
+
+        with (
+            patch("sys.argv", ["update-deps", str(mock_module_path)]),
+            patch("updater.cli.setup_module_logging", side_effect=mock_setup_logging),
+            patch("updater.cli.close_module_logging"),
+            patch("updater.cli.verify_claude_auth", side_effect=mock_auth),
+            patch("updater.cli.find_git_repo", return_value=mock_module_path.parent),
+            patch("updater.cli.update_git_branch", return_value=True),
+            patch("updater.cli.check_git_status", return_value=(0, [])),
+            patch(
+                "updater.cli.process_module_with_retry",
+                new_callable=AsyncMock,
+                return_value=(True, "updated"),
+            ),
+            patch("updater.cli.play_completion_sound"),
+            patch("builtins.print"),
+        ):
+            await main_async()
+
+        assert "setup_logging" in call_order
+        assert "verify_auth" in call_order
+        assert call_order.index("setup_logging") < call_order.index("verify_auth")
+
+    @pytest.mark.asyncio
     async def test_recursive_discovery(self, tmp_path, reset_config):
         """Test recursive module discovery."""
         # Create nested modules
