@@ -17,6 +17,34 @@ from .exceptions import ClaudeError
 from .log_manager import log_message
 
 
+def _extract_json_from_response(response_text: str) -> dict[str, Any]:
+    """Extract and parse JSON from a Claude response, handling markdown code blocks.
+
+    Raises:
+        ClaudeError: If the response cannot be parsed as JSON.
+    """
+    if "```json" in response_text:
+        start = response_text.find("```json") + 7
+        end = response_text.find("```", start)
+        response_text = response_text[start:end].strip()
+    elif "```" in response_text:
+        start = response_text.find("```") + 3
+        end = response_text.find("```", start)
+        response_text = response_text[start:end].strip()
+    else:
+        start = response_text.find("{")
+        end = response_text.rfind("}") + 1
+        if start != -1 and end > start:
+            response_text = response_text[start:end].strip()
+
+    try:
+        return json.loads(response_text)
+    except json.JSONDecodeError as e:
+        raise ClaudeError(
+            f"Failed to parse Claude response as JSON: {e}\nResponse: {response_text}"
+        ) from e
+
+
 def _short_path(p: Path) -> str:
     """Replace home directory prefix with ~ for shorter display."""
     try:
@@ -279,28 +307,7 @@ Return ONLY this JSON format (no markdown, no code blocks):
             response_text = await _run_claude(prompt, cwd=module_path, timeout=120)
 
             # Parse JSON response
-            # Extract JSON from response (handle markdown code blocks and plain text)
-            if "```json" in response_text:
-                start = response_text.find("```json") + 7
-                end = response_text.find("```", start)
-                response_text = response_text[start:end].strip()
-            elif "```" in response_text:
-                start = response_text.find("```") + 3
-                end = response_text.find("```", start)
-                response_text = response_text[start:end].strip()
-            else:
-                # No code blocks - find JSON by braces
-                start = response_text.find("{")
-                end = response_text.rfind("}") + 1
-                if start != -1 and end > start:
-                    response_text = response_text[start:end].strip()
-
-            try:
-                analysis = json.loads(response_text)
-            except json.JSONDecodeError as e:
-                raise ClaudeError(
-                    f"Failed to parse Claude response as JSON: {e}\nResponse: {response_text}"
-                ) from e
+            analysis = _extract_json_from_response(response_text)
 
             metrics.record_call(
                 "analyze_changes", time.monotonic() - call_start, success=True, rate_limited=False
@@ -427,26 +434,7 @@ Return ONLY this JSON format (no markdown, no code blocks):
             response_text = await _run_claude(prompt, timeout=60)
 
             # Parse JSON response
-            if "```json" in response_text:
-                start = response_text.find("```json") + 7
-                end = response_text.find("```", start)
-                response_text = response_text[start:end].strip()
-            elif "```" in response_text:
-                start = response_text.find("```") + 3
-                end = response_text.find("```", start)
-                response_text = response_text[start:end].strip()
-            else:
-                start = response_text.find("{")
-                end = response_text.rfind("}") + 1
-                if start != -1 and end > start:
-                    response_text = response_text[start:end].strip()
-
-            try:
-                analysis = json.loads(response_text)
-            except json.JSONDecodeError as e:
-                raise ClaudeError(
-                    f"Failed to parse Claude response as JSON: {e}\nResponse: {response_text}"
-                ) from e
+            analysis = _extract_json_from_response(response_text)
 
             version_bump = analysis.get("version_bump", "patch")
             metrics.record_call(
@@ -561,26 +549,7 @@ Return ONLY this JSON format (no markdown, no code blocks):
             response_text = await _run_claude(prompt, timeout=60)
 
             # Parse JSON response
-            if "```json" in response_text:
-                start = response_text.find("```json") + 7
-                end = response_text.find("```", start)
-                response_text = response_text[start:end].strip()
-            elif "```" in response_text:
-                start = response_text.find("```") + 3
-                end = response_text.find("```", start)
-                response_text = response_text[start:end].strip()
-            else:
-                start = response_text.find("{")
-                end = response_text.rfind("}") + 1
-                if start != -1 and end > start:
-                    response_text = response_text[start:end].strip()
-
-            try:
-                analysis = json.loads(response_text)
-            except json.JSONDecodeError as e:
-                raise ClaudeError(
-                    f"Failed to parse Claude response as JSON: {e}\nResponse: {response_text}"
-                ) from e
+            analysis = _extract_json_from_response(response_text)
 
             entries = analysis.get("entries", [])
             log_func(f"  Generated {len(entries)} changelog entries", to_console=True)

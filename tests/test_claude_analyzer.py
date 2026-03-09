@@ -8,6 +8,7 @@ import pytest
 
 from updater import config
 from updater.claude_analyzer import (
+    _extract_json_from_response,
     _get_clean_config_dir,
     _without_claudecode,
     analyze_changes_with_claude,
@@ -32,6 +33,33 @@ def mock_module_path(tmp_path):
     module_path = tmp_path / "test-module"
     module_path.mkdir()
     return module_path
+
+
+class TestExtractJsonFromResponse:
+    """Tests for _extract_json_from_response helper."""
+
+    def test_json_code_block(self):
+        """Extracts JSON from a ```json ... ``` block."""
+        response = '```json\n{"key": "value"}\n```'
+        result = _extract_json_from_response(response)
+        assert result == {"key": "value"}
+
+    def test_plain_code_block(self):
+        """Extracts JSON from a plain ``` ... ``` block."""
+        response = '```\n{"key": "value"}\n```'
+        result = _extract_json_from_response(response)
+        assert result == {"key": "value"}
+
+    def test_no_code_block_with_braces(self):
+        """Extracts JSON by brace matching when there is no code block."""
+        response = 'Here is the result: {"key": "value"} done.'
+        result = _extract_json_from_response(response)
+        assert result == {"key": "value"}
+
+    def test_no_json_raises_claude_error(self):
+        """Raises ClaudeError when response cannot be parsed as JSON."""
+        with pytest.raises(ClaudeError, match="Failed to parse Claude response as JSON"):
+            _extract_json_from_response("This is not valid JSON at all")
 
 
 class TestAnalyzeChangesWithClaude:
