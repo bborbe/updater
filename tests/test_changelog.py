@@ -3,12 +3,18 @@
 import pytest
 
 from updater.changelog import (
+    add_to_unreleased,
     bump_version,
     extract_current_version,
     get_unreleased_entries,
     promote_unreleased_to_version,
+    update_changelog_with_suggestions,
 )
 from updater.exceptions import ChangelogError
+
+
+def noop_log(*args, **kwargs):
+    """No-op log function for testing."""
 
 
 def test_bump_version_patch():
@@ -284,3 +290,180 @@ def test_promote_unreleased_to_version_wip_title(tmp_path):
     assert "## v1.1.0" in content
     assert "## WIP Changes" not in content
     assert "- Work in progress" in content
+
+
+# ---------------------------------------------------------------------------
+# add_to_unreleased
+# ---------------------------------------------------------------------------
+
+
+def test_add_to_unreleased_no_changelog(tmp_path):
+    """Test add_to_unreleased logs warning and returns when CHANGELOG.md missing."""
+    logged = []
+
+    def log_func(*args, **kwargs):
+        logged.append(args[0] if args else "")
+
+    add_to_unreleased(tmp_path, {"changelog": ["Fix bug"]}, log_func)
+
+    assert any("skipping" in msg or "No CHANGELOG" in msg for msg in logged)
+    assert not (tmp_path / "CHANGELOG.md").exists()
+
+
+def test_add_to_unreleased_existing_unreleased_section(tmp_path):
+    """Test add_to_unreleased appends bullets to existing ## Unreleased section."""
+    changelog_path = tmp_path / "CHANGELOG.md"
+    changelog_path.write_text(
+        """# Changelog
+
+## Unreleased
+
+- Existing entry
+
+## v1.0.0
+
+- Initial release
+"""
+    )
+
+    add_to_unreleased(tmp_path, {"changelog": ["Add new feature", "Fix critical bug"]}, noop_log)
+
+    content = changelog_path.read_text()
+    assert "## Unreleased" in content
+    assert "- Existing entry" in content
+    assert "- Add new feature" in content
+    assert "- Fix critical bug" in content
+    # New bullets should appear before the version header
+    unreleased_pos = content.index("## Unreleased")
+    version_pos = content.index("## v1.0.0")
+    new_feature_pos = content.index("- Add new feature")
+    assert unreleased_pos < new_feature_pos < version_pos
+
+
+def test_add_to_unreleased_no_unreleased_creates_before_version(tmp_path):
+    """Test add_to_unreleased creates ## Unreleased before first version header."""
+    changelog_path = tmp_path / "CHANGELOG.md"
+    changelog_path.write_text(
+        """# Changelog
+
+## v1.0.0
+
+- Initial release
+"""
+    )
+
+    add_to_unreleased(tmp_path, {"changelog": ["Add feature"]}, noop_log)
+
+    content = changelog_path.read_text()
+    assert "## Unreleased" in content
+    assert "- Add feature" in content
+    # Unreleased section must appear before the version section
+    assert content.index("## Unreleased") < content.index("## v1.0.0")
+
+
+def test_add_to_unreleased_no_version_headers(tmp_path):
+    """Test add_to_unreleased creates ## Unreleased at end of preamble when no versions exist."""
+    changelog_path = tmp_path / "CHANGELOG.md"
+    changelog_path.write_text("# Changelog\n\nSome preamble text.\n")
+
+    add_to_unreleased(tmp_path, {"changelog": ["Initial change"]}, noop_log)
+
+    content = changelog_path.read_text()
+    assert "## Unreleased" in content
+    assert "- Initial change" in content
+
+
+def test_add_to_unreleased_file_content_format(tmp_path):
+    """Test add_to_unreleased writes correctly formatted bullets."""
+    changelog_path = tmp_path / "CHANGELOG.md"
+    changelog_path.write_text("# Changelog\n\n## v1.0.0\n\n- Old entry\n")
+
+    add_to_unreleased(tmp_path, {"changelog": ["Fix bug", "- Add feature"]}, noop_log)
+
+    content = changelog_path.read_text()
+    # Bullets must be normalised (leading "- " stripped and re-added)
+    assert "- Fix bug" in content
+    assert "- Add feature" in content
+    # Should not have double dashes
+    assert "-- " not in content
+
+
+# ---------------------------------------------------------------------------
+# update_changelog_with_suggestions
+# ---------------------------------------------------------------------------
+
+
+def test_update_changelog_with_suggestions_no_changelog(tmp_path):
+    """Test update_changelog_with_suggestions returns None when CHANGELOG.md missing."""
+    result = update_changelog_with_suggestions(
+        tmp_path, {"version_bump": "patch", "changelog": ["Fix bug"]}, noop_log
+    )
+    assert result is None
+
+
+def test_update_changelog_with_suggestions_patch_bump(tmp_path):
+    """Test update_changelog_with_suggestions inserts patch version section and returns version."""
+    changelog_path = tmp_path / "CHANGELOG.md"
+    changelog_path.write_text(
+        """# Changelog
+
+## v1.2.3
+
+- Previous change
+"""
+    )
+
+    result = update_changelog_with_suggestions(
+        tmp_path,
+        {"version_bump": "patch", "changelog": ["Fix regression"]},
+        noop_log,
+    )
+
+    assert result == "v1.2.4"
+    content = changelog_path.read_text()
+    assert "## v1.2.4" in content
+    assert "- Fix regression" in content
+    # New version should appear before old version
+    assert content.index("## v1.2.4") < content.index("## v1.2.3")
+
+
+def test_update_changelog_with_suggestions_minor_bump(tmp_path):
+    """Test update_changelog_with_suggestions handles minor version bump correctly."""
+    changelog_path = tmp_path / "CHANGELOG.md"
+    changelog_path.write_text(
+        """# Changelog
+
+## v2.0.0
+
+- Major release
+"""
+    )
+
+    result = update_changelog_with_suggestions(
+        tmp_path,
+        {"version_bump": "minor", "changelog": ["Add new API"]},
+        noop_log,
+    )
+
+    assert result == "v2.1.0"
+    content = changelog_path.read_text()
+    assert "## v2.1.0" in content
+    assert "- Add new API" in content
+
+
+def test_update_changelog_with_suggestions_file_content_format(tmp_path):
+    """Test update_changelog_with_suggestions writes correct CHANGELOG format."""
+    changelog_path = tmp_path / "CHANGELOG.md"
+    changelog_path.write_text("# Changelog\n\n## v1.0.0\n\n- Init\n")
+
+    update_changelog_with_suggestions(
+        tmp_path,
+        {"version_bump": "patch", "changelog": ["- Fix typo", "Add docs"]},
+        noop_log,
+    )
+
+    content = changelog_path.read_text()
+    # Bullets normalised: leading "- " stripped and re-added
+    assert "- Fix typo" in content
+    assert "- Add docs" in content
+    assert "-- " not in content
