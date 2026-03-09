@@ -1,7 +1,12 @@
 ---
-status: approved
+status: completed
+summary: Added 14 tests for add_to_unreleased() and update_changelog_with_suggestions() raising changelog.py coverage from 49% to 100%, and updated CHANGELOG.md with an Unreleased section.
+container: updater-020-test-coverage-changelog
+dark-factory-version: v0.30.17-dirty
 created: "2026-03-09T21:19:37Z"
 queued: "2026-03-09T21:19:37Z"
+started: "2026-03-09T21:29:06Z"
+completed: "2026-03-09T21:30:24Z"
 ---
 
 <summary>
