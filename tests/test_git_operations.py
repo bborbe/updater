@@ -2,11 +2,16 @@
 
 from unittest.mock import Mock, patch
 
+import pytest
+
 from updater.git_operations import (
     check_git_status,
     get_commits_since_tag,
     get_latest_tag,
+    git_commit,
     git_push,
+    git_tag_from_changelog,
+    update_git_branch,
 )
 
 
@@ -252,3 +257,317 @@ def test_get_latest_tag_with_v_prefix(tmp_path):
         result = get_latest_tag(tmp_path)
 
         assert result == "v1.2.3"
+
+
+# --- update_git_branch tests ---
+
+
+def test_update_git_branch_success_with_tracking(tmp_path):
+    """Test update_git_branch succeeds: fetch, pull (tracking branch), merge all succeed."""
+    log = Mock()
+
+    with patch("subprocess.run") as mock_run:
+        mock_run.side_effect = [
+            Mock(returncode=0, stdout="main\n", stderr=""),  # git branch --show-current
+            Mock(returncode=0, stdout="", stderr=""),  # git fetch origin
+            Mock(returncode=0, stdout="origin/main\n", stderr=""),  # rev-parse (has tracking)
+            Mock(returncode=0, stdout="", stderr=""),  # git pull
+            Mock(returncode=0, stdout="", stderr=""),  # git merge origin/master
+        ]
+
+        result = update_git_branch(tmp_path, log_func=log)
+
+        assert result is True
+
+
+def test_update_git_branch_fetch_failure(tmp_path):
+    """Test update_git_branch returns False when fetch fails."""
+    log = Mock()
+
+    with patch("subprocess.run") as mock_run:
+        mock_run.side_effect = [
+            Mock(returncode=0, stdout="main\n", stderr=""),  # git branch --show-current
+            Mock(returncode=1, stdout="", stderr="fetch failed"),  # git fetch fails
+        ]
+
+        result = update_git_branch(tmp_path, log_func=log)
+
+        assert result is False
+
+
+def test_update_git_branch_no_tracking_branch(tmp_path):
+    """Test update_git_branch skips pull when no tracking branch."""
+    log = Mock()
+
+    with patch("subprocess.run") as mock_run:
+        mock_run.side_effect = [
+            Mock(returncode=0, stdout="feature\n", stderr=""),  # git branch --show-current
+            Mock(returncode=0, stdout="", stderr=""),  # git fetch origin
+            Mock(returncode=128, stdout="", stderr="no upstream"),  # rev-parse fails (no tracking)
+            Mock(returncode=0, stdout="", stderr=""),  # git merge origin/master
+        ]
+
+        result = update_git_branch(tmp_path, log_func=log)
+
+        assert result is True
+
+
+def test_update_git_branch_merge_failure(tmp_path):
+    """Test update_git_branch returns False when merge fails."""
+    log = Mock()
+
+    with patch("subprocess.run") as mock_run:
+        mock_run.side_effect = [
+            Mock(returncode=0, stdout="main\n", stderr=""),  # git branch --show-current
+            Mock(returncode=0, stdout="", stderr=""),  # git fetch origin
+            Mock(returncode=128, stdout="", stderr="no upstream"),  # no tracking branch
+            Mock(returncode=1, stdout="", stderr="merge conflict"),  # git merge fails
+        ]
+
+        result = update_git_branch(tmp_path, log_func=log)
+
+        assert result is False
+
+
+def test_update_git_branch_default_log(tmp_path):
+    """Test update_git_branch uses print when no log_func provided."""
+    with patch("subprocess.run") as mock_run:
+        mock_run.side_effect = [
+            Mock(returncode=0, stdout="main\n", stderr=""),
+            Mock(returncode=0, stdout="", stderr=""),
+            Mock(returncode=128, stdout="", stderr=""),
+            Mock(returncode=0, stdout="", stderr=""),
+        ]
+
+        with patch("builtins.print") as mock_print:
+            result = update_git_branch(tmp_path)
+
+            assert result is True
+            assert mock_print.called
+
+
+# --- git_commit tests ---
+
+
+def test_git_commit_success(tmp_path):
+    """Test git_commit calls git add and git commit."""
+    log = Mock()
+
+    with patch("updater.log_manager.run_command") as mock_run:
+        git_commit(tmp_path, "test commit message", log_func=log)
+
+        assert mock_run.call_count == 2
+        calls = [c[0][0] for c in mock_run.call_args_list]
+        assert "git add ." in calls
+        assert any("git commit" in c for c in calls)
+
+
+def test_git_commit_failure_raises(tmp_path):
+    """Test git_commit propagates RuntimeError from run_command."""
+    log = Mock()
+
+    with patch("updater.log_manager.run_command") as mock_run:
+        mock_run.side_effect = RuntimeError("git commit failed")
+
+        with pytest.raises(RuntimeError):
+            git_commit(tmp_path, "test message", log_func=log)
+
+
+# --- git_tag_from_changelog tests ---
+
+
+def test_git_tag_from_changelog_success(tmp_path):
+    """Test git_tag_from_changelog creates tag when conditions are met."""
+    log = Mock()
+
+    changelog = tmp_path / "CHANGELOG.md"
+    changelog.write_text("# Changelog\n\n## v1.2.3\n\n- Some change\n")
+
+    with (
+        patch("subprocess.run") as mock_run,
+        patch("updater.log_manager.run_command") as mock_cmd,
+    ):
+        mock_run.side_effect = [
+            Mock(returncode=0),  # git diff-index (no uncommitted changes)
+            Mock(returncode=1),  # git describe --tags (HEAD not tagged)
+        ]
+
+        git_tag_from_changelog(tmp_path, log_func=log)
+
+        mock_cmd.assert_called_once()
+        cmd = mock_cmd.call_args[0][0]
+        assert "v1.2.3" in cmd
+
+
+def test_git_tag_from_changelog_uncommitted_changes(tmp_path):
+    """Test git_tag_from_changelog skips when there are uncommitted changes."""
+    log = Mock()
+
+    with patch("subprocess.run") as mock_run:
+        mock_run.return_value = Mock(returncode=1)  # diff-index: uncommitted changes
+
+        with patch("updater.log_manager.run_command") as mock_cmd:
+            git_tag_from_changelog(tmp_path, log_func=log)
+
+            mock_cmd.assert_not_called()
+
+
+def test_git_tag_from_changelog_already_tagged(tmp_path):
+    """Test git_tag_from_changelog skips when HEAD is already tagged."""
+    log = Mock()
+
+    with patch("subprocess.run") as mock_run:
+        mock_run.side_effect = [
+            Mock(returncode=0),  # git diff-index (clean)
+            Mock(returncode=0),  # git describe (already tagged)
+        ]
+
+        with patch("updater.log_manager.run_command") as mock_cmd:
+            git_tag_from_changelog(tmp_path, log_func=log)
+
+            mock_cmd.assert_not_called()
+
+
+def test_git_tag_from_changelog_no_changelog(tmp_path):
+    """Test git_tag_from_changelog skips when no CHANGELOG.md found."""
+    log = Mock()
+
+    with patch("subprocess.run") as mock_run:
+        mock_run.side_effect = [
+            Mock(returncode=0),  # git diff-index (clean)
+            Mock(returncode=1),  # git describe (not tagged)
+        ]
+
+        with patch("updater.log_manager.run_command") as mock_cmd:
+            git_tag_from_changelog(tmp_path, log_func=log)
+
+            mock_cmd.assert_not_called()
+
+
+def test_git_tag_from_changelog_no_version_in_changelog(tmp_path):
+    """Test git_tag_from_changelog skips when CHANGELOG has no version."""
+    log = Mock()
+
+    changelog = tmp_path / "CHANGELOG.md"
+    changelog.write_text("# Changelog\n\n## Unreleased\n\n- Some change\n")
+
+    with patch("subprocess.run") as mock_run:
+        mock_run.side_effect = [
+            Mock(returncode=0),  # git diff-index (clean)
+            Mock(returncode=1),  # git describe (not tagged)
+        ]
+
+        with patch("updater.log_manager.run_command") as mock_cmd:
+            git_tag_from_changelog(tmp_path, log_func=log)
+
+            mock_cmd.assert_not_called()
+
+
+# --- update_git_branch missing path tests ---
+
+
+def test_update_git_branch_branch_command_failure(tmp_path):
+    """Test update_git_branch returns False when git branch --show-current fails."""
+    log = Mock()
+
+    with patch("subprocess.run") as mock_run:
+        mock_run.return_value = Mock(returncode=1, stdout="", stderr="not a git repo")
+
+        result = update_git_branch(tmp_path, log_func=log)
+
+        assert result is False
+
+
+def test_update_git_branch_pull_failure(tmp_path):
+    """Test update_git_branch returns False when pull fails (tracking branch exists)."""
+    log = Mock()
+
+    with patch("subprocess.run") as mock_run:
+        mock_run.side_effect = [
+            Mock(returncode=0, stdout="main\n", stderr=""),  # git branch --show-current
+            Mock(returncode=0, stdout="", stderr=""),  # git fetch origin
+            Mock(returncode=0, stdout="origin/main\n", stderr=""),  # rev-parse (has tracking)
+            Mock(returncode=1, stdout="", stderr="pull failed"),  # git pull fails
+        ]
+
+        result = update_git_branch(tmp_path, log_func=log)
+
+        assert result is False
+
+
+# --- ensure_changelog_tag tests ---
+
+
+def test_ensure_changelog_tag_no_changelog(tmp_path):
+    """Test ensure_changelog_tag returns False when no CHANGELOG.md."""
+    from updater.git_operations import ensure_changelog_tag
+
+    log = Mock()
+
+    result = ensure_changelog_tag(tmp_path, log_func=log)
+
+    assert result is False
+
+
+def test_ensure_changelog_tag_no_version(tmp_path):
+    """Test ensure_changelog_tag returns False when CHANGELOG has no version."""
+    from updater.git_operations import ensure_changelog_tag
+
+    log = Mock()
+    changelog = tmp_path / "CHANGELOG.md"
+    changelog.write_text("# Changelog\n\n## Unreleased\n\n- Change\n")
+
+    result = ensure_changelog_tag(tmp_path, log_func=log)
+
+    assert result is False
+
+
+def test_ensure_changelog_tag_already_exists(tmp_path):
+    """Test ensure_changelog_tag returns False when tag already exists."""
+    from updater.git_operations import ensure_changelog_tag
+
+    log = Mock()
+    changelog = tmp_path / "CHANGELOG.md"
+    changelog.write_text("# Changelog\n\n## v1.2.3\n\n- Change\n")
+
+    with patch("subprocess.run") as mock_run:
+        mock_run.return_value = Mock(returncode=0, stdout="v1.2.3\n")
+
+        result = ensure_changelog_tag(tmp_path, log_func=log)
+
+        assert result is False
+
+
+def test_ensure_changelog_tag_creates_tag(tmp_path):
+    """Test ensure_changelog_tag creates tag when version exists and tag is missing."""
+    from updater.git_operations import ensure_changelog_tag
+
+    log = Mock()
+    changelog = tmp_path / "CHANGELOG.md"
+    changelog.write_text("# Changelog\n\n## v1.2.3\n\n- Change\n")
+
+    with (
+        patch("subprocess.run") as mock_run,
+        patch("updater.log_manager.run_command") as mock_cmd,
+    ):
+        mock_run.return_value = Mock(returncode=0, stdout="")  # tag doesn't exist
+
+        result = ensure_changelog_tag(tmp_path, log_func=log)
+
+        assert result is True
+        mock_cmd.assert_called_once()
+        cmd = mock_cmd.call_args[0][0]
+        assert "v1.2.3" in cmd
+
+
+# --- get_commits_since_tag error path ---
+
+
+def test_get_commits_since_tag_git_error(tmp_path):
+    """Test get_commits_since_tag returns empty list on git error."""
+    with patch("subprocess.run") as mock_run:
+        mock_run.return_value = Mock(returncode=1, stdout="", stderr="error")
+
+        result = get_commits_since_tag(tmp_path, "v1.0.0")
+
+        assert result == []

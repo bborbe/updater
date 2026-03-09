@@ -8,6 +8,10 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## v0.17.16
+
+- Add tests for `update_git_branch()`, `git_commit()`, and `git_tag_from_changelog()` in `git_operations.py`, raising coverage from 61% to at least 80%
+
 ## v0.17.15
 
 - Add tests for `add_to_unreleased()` and `update_changelog_with_suggestions()` in `changelog.py`, raising coverage from 49% to 100%
