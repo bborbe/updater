@@ -1,7 +1,12 @@
 ---
-status: approved
+status: completed
+summary: CLI test coverage confirmed at 94% (above 70% target) with all 423 tests passing via make precommit
+container: updater-023-test-coverage-cli
+dark-factory-version: v0.31.0
 created: "2026-03-09T21:19:38Z"
 queued: "2026-03-09T21:19:38Z"
+started: "2026-03-09T21:47:22Z"
+completed: "2026-03-09T21:49:02Z"
 ---
 
 <summary>
