@@ -84,6 +84,7 @@ async def process_single_go_module(module_path: Path, update_deps: bool = True) 
         CheckChangesStep,
         GitCommitStep,
         GitConfirmStep,
+        GitSyncStep,
         GoDepSkipStep,
         GoDepUpdateStep,
         GoExcludesStep,
@@ -118,6 +119,7 @@ async def process_single_go_module(module_path: Path, update_deps: bool = True) 
         dep_step = GoDepUpdateStep() if update_deps else GoDepSkipStep()
         pipeline = Pipeline(
             [
+                GitSyncStep(),
                 GoVersionUpdateStep(),
                 GoExcludesStep(),
                 dep_step,
@@ -168,6 +170,7 @@ async def process_single_python_module(module_path: Path) -> tuple[bool, str]:
         CheckChangesStep,
         GitCommitStep,
         GitConfirmStep,
+        GitSyncStep,
         Pipeline,
         PrecommitStep,
         PythonDepUpdateStep,
@@ -198,6 +201,7 @@ async def process_single_python_module(module_path: Path) -> tuple[bool, str]:
         # Build pipeline
         pipeline = Pipeline(
             [
+                GitSyncStep(),
                 PythonVersionUpdateStep(),
                 PythonDepUpdateStep(),
                 CheckChangesStep(phase="update"),

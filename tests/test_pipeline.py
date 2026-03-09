@@ -6,6 +6,7 @@ from updater.pipeline import (
     CheckChangesStep,
     DockerCommitStep,
     GitConfirmStep,
+    GitSyncStep,
     Pipeline,
     PrecommitStep,
     ReleaseStep,
@@ -343,6 +344,39 @@ async def test_default_precommit_runs_when_no_override(tmp_path):
         mock_run_command.assert_not_called()
         mock_go_precommit.assert_called_once()
         assert mock_go_precommit.call_args[0][0] == tmp_path
+
+
+# ---------------------------------------------------------------------------
+# GitSyncStep
+# ---------------------------------------------------------------------------
+
+
+async def test_git_sync_step_success(tmp_path):
+    """Test GitSyncStep returns SUCCESS when update_git_branch returns True."""
+    with (
+        patch("updater.pipeline.update_git_branch", return_value=True) as mock_sync,
+        patch("updater.pipeline.log_message"),
+    ):
+        step = GitSyncStep()
+        ctx = {}
+        result = await step.run(tmp_path, ctx)
+
+        assert result.status == StepStatus.SUCCESS
+        mock_sync.assert_called_once_with(tmp_path, log_func=mock_sync.call_args[1]["log_func"])
+
+
+async def test_git_sync_step_failure(tmp_path):
+    """Test GitSyncStep returns FAIL when update_git_branch returns False."""
+    with (
+        patch("updater.pipeline.update_git_branch", return_value=False),
+        patch("updater.pipeline.log_message"),
+    ):
+        step = GitSyncStep()
+        ctx = {}
+        result = await step.run(tmp_path, ctx)
+
+        assert result.status == StepStatus.FAIL
+        assert result.metadata["error"] == "git sync failed"
 
 
 async def test_check_command_failure_raises(tmp_path):

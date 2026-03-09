@@ -30,6 +30,7 @@ from .git_operations import (
     git_commit,
     git_push,
     git_tag_from_changelog,
+    update_git_branch,
 )
 from .go_updater import fix_osv_vulnerabilities, update_go_dependencies
 from .go_updater import run_precommit as run_go_precommit
@@ -328,6 +329,17 @@ class ChangelogStep(Step):
 # ---------------------------------------------------------------------------
 # Git steps
 # ---------------------------------------------------------------------------
+
+
+class GitSyncStep(Step):
+    """Sync repo with origin/master before updating."""
+
+    async def run(self, module_path: Path, context: dict[str, Any]) -> StepResult:
+        log_message("=== Phase 0: Sync with origin/master ===", to_console=True)
+        success = update_git_branch(module_path, log_func=log_message)
+        if not success:
+            return StepResult(StepStatus.FAIL, {"error": "git sync failed"})
+        return StepResult(StepStatus.SUCCESS, {})
 
 
 class GitConfirmStep(Step):
