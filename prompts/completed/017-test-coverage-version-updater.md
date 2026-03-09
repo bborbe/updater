@@ -1,7 +1,12 @@
 ---
-status: approved
+status: completed
+summary: Fixed Python 3 syntax errors in version_updater.py (parenthesized except clauses) and added 12 mocked tests covering get_latest_golang_version(), get_latest_alpine_version(), and update_versions(), raising coverage from 73% to 97%
+container: updater-017-test-coverage-version-updater
+dark-factory-version: v0.30.17-dirty
 created: "2026-03-09T21:19:37Z"
 queued: "2026-03-09T21:19:37Z"
+started: "2026-03-09T21:22:10Z"
+completed: "2026-03-09T21:24:00Z"
 ---
 
 <summary>
