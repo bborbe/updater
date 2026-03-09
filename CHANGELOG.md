@@ -8,6 +8,10 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## v0.17.1
+
+- fix: improve auth check error messages (show config dir, actionable fix hint, handle empty TimeoutError)
+
 ## v0.17.0
 
 - feat: Sync with origin/master before updating (git fetch -p + merge) for all go/python update commands

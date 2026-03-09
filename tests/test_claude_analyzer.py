@@ -440,8 +440,8 @@ class TestVerifyClaudeAuth:
             success, error = await verify_claude_auth()
 
         assert success is False
-        assert "Claude authentication failed" in error
-        assert "claude login" in error
+        assert "authentication failed" in error.lower()
+        assert "/login" in error
 
     @pytest.mark.asyncio
     async def test_login_required_error(self, reset_config):
@@ -488,7 +488,9 @@ class TestVerifyClaudeAuth:
             success, error = await verify_claude_auth()
 
         assert success is False
-        assert "failed" in error.lower()
+        assert "timed out" in error.lower()
+        assert "3 attempts" in error
+        assert "/login" in error
 
 
 class TestGenerateChangelogFromCommits:

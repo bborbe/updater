@@ -26,6 +26,14 @@ MAX_DIFF_PER_FILE = 50_000  # 50KB per file
 MAX_TOTAL_DIFF = 200_000  # 200KB total
 
 
+def _short_path(p: Path) -> str:
+    """Replace home directory prefix with ~ for shorter display."""
+    try:
+        return "~/" + str(p.relative_to(Path.home()))
+    except ValueError:
+        return str(p)
+
+
 @contextmanager
 def _without_claudecode() -> Generator[None]:
     """Temporarily remove CLAUDECODE from os.environ to allow nested Claude invocation."""
@@ -219,14 +227,14 @@ async def _verify_claude_auth_impl() -> tuple[bool, str]:
 
             return True, ""
         except Exception as e:
-            error_str = str(e)
+            error_str = str(e) or type(e).__name__
+            config_info = _short_path(clean_config_dir) if clean_config_dir else "~/.claude"
+            fix_hint = f"Fix: Run 'CLAUDE_CONFIG_DIR={config_info} claude' and use /login"
 
             # Check for auth errors (non-retryable)
             if "Invalid API key" in error_str or "login" in error_str.lower():
-                config_info = str(clean_config_dir) if clean_config_dir else "~/.claude"
                 return False, (
-                    f"Claude authentication failed for config directory: {config_info}\n\n"
-                    "Fix: Run 'claude login' to authenticate."
+                    f"Claude authentication failed (config: {config_info})\n\n{fix_hint}"
                 )
 
             # Check if it's a timeout or connection error worth retrying
@@ -241,8 +249,18 @@ async def _verify_claude_auth_impl() -> tuple[bool, str]:
                 await asyncio.sleep(delay)
                 continue
             else:
-                # Non-retryable error or final attempt
-                return False, f"Claude check failed after {attempt + 1} attempts: {error_str}"
+                # Build detailed error message
+                if isinstance(e, asyncio.TimeoutError):
+                    return False, (
+                        f"Claude timed out after {attempt + 1} attempts (30s each).\n"
+                        f"Config: {config_info}\n\n"
+                        f"{fix_hint}"
+                    )
+                return False, (
+                    f"Claude check failed after {attempt + 1} attempts: {error_str}\n"
+                    f"Config: {config_info}\n\n"
+                    f"{fix_hint}"
+                )
 
     return False, "Claude check failed after all retries"
 
