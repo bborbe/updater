@@ -1,7 +1,12 @@
 ---
-status: approved
+status: completed
+summary: Added subprocess cleanup on timeout in _run_claude() with proc.kill()/proc.wait(), added test verifying kill is called, and updated CHANGELOG.md
+container: updater-013-kill-subprocess-on-timeout
+dark-factory-version: v0.30.17-dirty
 created: "2026-03-09T20:55:36Z"
 queued: "2026-03-09T20:55:36Z"
+started: "2026-03-09T20:57:01Z"
+completed: "2026-03-09T20:59:46Z"
 ---
 
 <summary>
