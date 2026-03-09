@@ -13,6 +13,7 @@ from updater.claude_analyzer import (
     _run_claude,
     _without_claudecode,
     analyze_changes_with_claude,
+    analyze_unreleased_for_release,
     generate_changelog_from_commits,
     verify_claude_auth,
 )
@@ -279,6 +280,31 @@ class TestAnalyzeChangesWithClaude:
             clean_dir = fake_home / ".claude-clean"
             assert not clean_dir.exists()
 
+    def test_clean_config_dir_returns_none_when_missing(self, tmp_path):
+        """Test that _get_clean_config_dir returns None when .claude-clean doesn't exist."""
+        fake_home = tmp_path / "home"
+        fake_home.mkdir()
+
+        with patch("updater.claude_analyzer.Path.home", return_value=fake_home):
+            result = _get_clean_config_dir()
+
+        assert result is None
+
+    def test_clean_config_dir_removes_plugins_dir(self, tmp_path):
+        """Test that _get_clean_config_dir removes the plugins directory if present."""
+        fake_home = tmp_path / "home"
+        fake_home.mkdir()
+        clean_dir = fake_home / ".claude-clean"
+        clean_dir.mkdir()
+        plugins_dir = clean_dir / "plugins"
+        plugins_dir.mkdir()
+
+        with patch("updater.claude_analyzer.Path.home", return_value=fake_home):
+            result = _get_clean_config_dir()
+
+        assert result == clean_dir
+        assert not plugins_dir.exists()
+
     def test_clean_config_dir_used_if_exists(self, tmp_path):
         """Test that _get_clean_config_dir sets up settings.json when .claude-clean exists."""
         # Use tmp_path as home directory for testing
@@ -378,6 +404,46 @@ class TestVerifyClaudeAuth:
         assert "Network timeout" in error
 
     @pytest.mark.asyncio
+    async def test_timeout_keyword_triggers_retries_and_exhausts(self, reset_config):
+        """Test that a 'timeout' error triggers retries and fails after max_retries."""
+        call_count = 0
+
+        async def side_effect(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            raise ClaudeError("connection timeout")
+
+        with (
+            patch("updater.claude_analyzer._run_claude", side_effect=side_effect),
+            patch("asyncio.sleep", new_callable=AsyncMock),
+        ):
+            success, error = await verify_claude_auth()
+
+        assert success is False
+        assert call_count == 3
+        assert "failed" in error.lower()
+
+    @pytest.mark.asyncio
+    async def test_non_retryable_error_fails_immediately(self, reset_config):
+        """Test that an unknown non-retryable error fails on the first attempt."""
+        call_count = 0
+
+        async def side_effect(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            raise Exception("completely unknown XYZ123 error")
+
+        with (
+            patch("updater.claude_analyzer._run_claude", side_effect=side_effect),
+            patch("asyncio.sleep", new_callable=AsyncMock) as mock_sleep,
+        ):
+            success, error = await verify_claude_auth()
+
+        assert success is False
+        assert call_count == 1
+        mock_sleep.assert_not_called()
+
+    @pytest.mark.asyncio
     async def test_auth_times_out_after_30_seconds(self, reset_config):
         """Test that asyncio.TimeoutError from wait_for is treated as retryable and exhausts retries."""
 
@@ -394,6 +460,66 @@ class TestVerifyClaudeAuth:
         assert success is False
         assert "timed out" in error.lower()
         assert "/login" in error
+
+
+class TestAnalyzeUnreleasedForRelease:
+    """Tests for analyze_unreleased_for_release function."""
+
+    @pytest.mark.asyncio
+    async def test_success_path_returns_version_bump(self, reset_config):
+        """Test successful analysis returns version bump dict."""
+        response = json.dumps({"version_bump": "minor"})
+        mock_log = Mock()
+
+        with (
+            patch("updater.claude_analyzer._run_claude", new_callable=AsyncMock) as mock_run,
+            patch("asyncio.sleep", new_callable=AsyncMock),
+        ):
+            mock_run.return_value = response
+            result = await analyze_unreleased_for_release(
+                ["Add new feature", "Fix bug"], "test-module", log_func=mock_log
+            )
+
+        assert result["version_bump"] == "minor"
+
+    @pytest.mark.asyncio
+    async def test_rate_limit_retries_and_succeeds(self, reset_config):
+        """Test that rate_limit error retries and succeeds on second attempt."""
+        call_count = 0
+
+        async def side_effect(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                raise ClaudeError("rate_limit exceeded")
+            return json.dumps({"version_bump": "patch"})
+
+        mock_log = Mock()
+
+        with (
+            patch("updater.claude_analyzer._run_claude", side_effect=side_effect),
+            patch("asyncio.sleep", new_callable=AsyncMock),
+        ):
+            result = await analyze_unreleased_for_release(
+                ["Fix bug"], "test-module", log_func=mock_log
+            )
+
+        assert result["version_bump"] == "patch"
+        assert call_count == 2
+
+    @pytest.mark.asyncio
+    async def test_max_retries_exhausted_raises_claude_error(self, reset_config):
+        """Test that exhausting all retries raises ClaudeError."""
+        with (
+            patch(
+                "updater.claude_analyzer._run_claude",
+                new_callable=AsyncMock,
+                side_effect=ClaudeError("connection error"),
+            ),
+            patch("asyncio.sleep", new_callable=AsyncMock),
+            pytest.raises(ClaudeError),
+        ):
+            await analyze_unreleased_for_release(["Fix bug"], "test-module")
 
 
 class TestGenerateChangelogFromCommits:
@@ -461,6 +587,32 @@ class TestGenerateChangelogFromCommits:
             )
 
         assert result == []
+
+    @pytest.mark.asyncio
+    async def test_retry_on_transient_error_succeeds(self, reset_config):
+        """Test that a transient (timeout) error retries and succeeds on second attempt."""
+        commits = [{"hash": "abc", "subject": "Add feature", "body": ""}]
+        call_count = 0
+
+        async def side_effect(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                raise ClaudeError("connection timeout")
+            return json.dumps({"entries": ["Added feature X"]})
+
+        mock_log = Mock()
+
+        with (
+            patch("updater.claude_analyzer._run_claude", side_effect=side_effect),
+            patch("asyncio.sleep", new_callable=AsyncMock),
+        ):
+            result = await generate_changelog_from_commits(
+                commits, "test-module", log_func=mock_log
+            )
+
+        assert result == ["Added feature X"]
+        assert call_count == 2
 
 
 class TestRunClaude:

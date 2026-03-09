@@ -8,6 +8,10 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## v0.17.17
+
+- Add tests for `_get_clean_config_dir()`, `_verify_claude_auth_impl()`, `analyze_unreleased_for_release()`, and `generate_changelog_from_commits()` in `claude_analyzer.py`, raising coverage from 65% to 85%
+
 ## v0.17.16
 
 - Add tests for `update_git_branch()`, `git_commit()`, and `git_tag_from_changelog()` in `git_operations.py`, raising coverage from 61% to at least 80%
