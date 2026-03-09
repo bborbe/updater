@@ -1,7 +1,12 @@
 ---
-status: approved
+status: completed
+summary: Added tests for _get_clean_config_dir, _verify_claude_auth_impl, analyze_unreleased_for_release, and generate_changelog_from_commits, raising claude_analyzer.py coverage from 65% to 85%
+container: updater-022-test-coverage-claude-analyzer
+dark-factory-version: v0.30.17-dirty
 created: "2026-03-09T21:19:37Z"
 queued: "2026-03-09T21:19:37Z"
+started: "2026-03-09T21:33:25Z"
+completed: "2026-03-09T21:36:03Z"
 ---
 
 <summary>
