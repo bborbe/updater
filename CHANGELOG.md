@@ -8,6 +8,10 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## v0.17.3
+
+- Add Claude API call metrics (call count, rate limits, durations) printed in run summary
+
 ## v0.17.2
 
 - fix: retry rate_limit_event errors with longer backoff (30/60/90s)

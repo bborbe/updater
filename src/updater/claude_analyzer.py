@@ -5,6 +5,7 @@ import json
 import os
 import shutil
 import subprocess
+import time
 from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from pathlib import Path
@@ -18,6 +19,7 @@ from claude_code_sdk import (
 )
 
 from . import config
+from .claude_metrics import metrics
 from .exceptions import ClaudeError
 from .log_manager import log_message
 
@@ -202,6 +204,7 @@ async def _verify_claude_auth_impl() -> tuple[bool, str]:
     rate_limit_delays = [30, 60, 90]
 
     for attempt in range(max_retries):
+        call_start = time.monotonic()
         try:
             with _without_claudecode():
                 env = os.environ.copy()
@@ -226,6 +229,9 @@ async def _verify_claude_auth_impl() -> tuple[bool, str]:
 
                 await asyncio.wait_for(_do_auth_check(options), timeout=30)
 
+            metrics.record_call(
+                "auth_check", time.monotonic() - call_start, success=True, rate_limited=False
+            )
             return True, ""
         except Exception as e:
             error_str = str(e) or type(e).__name__
@@ -234,6 +240,9 @@ async def _verify_claude_auth_impl() -> tuple[bool, str]:
 
             # Check for auth errors (non-retryable)
             if "Invalid API key" in error_str or "login" in error_str.lower():
+                metrics.record_call(
+                    "auth_check", time.monotonic() - call_start, success=False, rate_limited=False
+                )
                 return False, (
                     f"Claude authentication failed (config: {config_info})\n\n{fix_hint}"
                 )
@@ -251,10 +260,18 @@ async def _verify_claude_auth_impl() -> tuple[bool, str]:
             )
 
             is_rate_limit = "rate_limit" in error_str
+            metrics.record_call(
+                "auth_check",
+                time.monotonic() - call_start,
+                success=False,
+                rate_limited=is_rate_limit,
+            )
 
             if is_retryable and attempt < max_retries - 1:
                 delays = rate_limit_delays if is_rate_limit else retry_delays
                 delay = delays[attempt]
+                if is_rate_limit:
+                    metrics.record_rate_limit_wait(delay)
                 await asyncio.sleep(delay)
                 continue
             else:
@@ -348,6 +365,7 @@ Return ONLY this JSON format (no markdown, no code blocks):
 
     last_error = None
     for attempt in range(max_retries):
+        call_start = time.monotonic()
         try:
             clean_config_dir = _get_clean_config_dir()
             with _without_claudecode():
@@ -397,6 +415,9 @@ Return ONLY this JSON format (no markdown, no code blocks):
                     f"Failed to parse Claude response as JSON: {e}\nResponse: {response_text}"
                 ) from e
 
+            metrics.record_call(
+                "analyze_changes", time.monotonic() - call_start, success=True, rate_limited=False
+            )
             return {
                 "version_bump": analysis.get("version_bump", "patch"),
                 "changelog": analysis.get("changelog", ["go mod update"]),
@@ -418,6 +439,12 @@ Return ONLY this JSON format (no markdown, no code blocks):
             )
 
             is_rate_limit = "rate_limit" in error_str
+            metrics.record_call(
+                "analyze_changes",
+                time.monotonic() - call_start,
+                success=False,
+                rate_limited=is_rate_limit,
+            )
 
             if is_retryable and attempt < max_retries - 1:
                 delays = rate_limit_delays if is_rate_limit else retry_delays
@@ -427,6 +454,8 @@ Return ONLY this JSON format (no markdown, no code blocks):
                     f"→ {label} (attempt {attempt + 1}/{max_retries}), retrying in {delay}s...",
                     to_console=True,
                 )
+                if is_rate_limit:
+                    metrics.record_rate_limit_wait(delay)
                 await asyncio.sleep(delay)
                 last_error = e
                 continue
@@ -505,6 +534,7 @@ Return ONLY this JSON format (no markdown, no code blocks):
 
     last_error = None
     for attempt in range(max_retries):
+        call_start = time.monotonic()
         try:
             clean_config_dir = _get_clean_config_dir()
             with _without_claudecode():
@@ -552,6 +582,12 @@ Return ONLY this JSON format (no markdown, no code blocks):
                 ) from e
 
             version_bump = analysis.get("version_bump", "patch")
+            metrics.record_call(
+                "analyze_unreleased",
+                time.monotonic() - call_start,
+                success=True,
+                rate_limited=False,
+            )
             return {
                 "version_bump": version_bump,
             }
@@ -570,6 +606,12 @@ Return ONLY this JSON format (no markdown, no code blocks):
             )
 
             is_rate_limit = "rate_limit" in error_str
+            metrics.record_call(
+                "analyze_unreleased",
+                time.monotonic() - call_start,
+                success=False,
+                rate_limited=is_rate_limit,
+            )
 
             if is_retryable and attempt < max_retries - 1:
                 delays = rate_limit_delays if is_rate_limit else retry_delays
@@ -579,6 +621,8 @@ Return ONLY this JSON format (no markdown, no code blocks):
                     f"→ {label} (attempt {attempt + 1}/{max_retries}), retrying in {delay}s...",
                     to_console=True,
                 )
+                if is_rate_limit:
+                    metrics.record_rate_limit_wait(delay)
                 await asyncio.sleep(delay)
                 last_error = e
                 continue
@@ -644,6 +688,7 @@ Return ONLY this JSON format (no markdown, no code blocks):
 
     last_error = None
     for attempt in range(max_retries):
+        call_start = time.monotonic()
         try:
             clean_config_dir = _get_clean_config_dir()
             with _without_claudecode():
@@ -692,6 +737,12 @@ Return ONLY this JSON format (no markdown, no code blocks):
 
             entries = analysis.get("entries", [])
             log_func(f"  Generated {len(entries)} changelog entries", to_console=True)
+            metrics.record_call(
+                "generate_changelog",
+                time.monotonic() - call_start,
+                success=True,
+                rate_limited=False,
+            )
             return entries
 
         except Exception as e:
@@ -708,6 +759,12 @@ Return ONLY this JSON format (no markdown, no code blocks):
             )
 
             is_rate_limit = "rate_limit" in error_str
+            metrics.record_call(
+                "generate_changelog",
+                time.monotonic() - call_start,
+                success=False,
+                rate_limited=is_rate_limit,
+            )
 
             if is_retryable and attempt < max_retries - 1:
                 delays = rate_limit_delays if is_rate_limit else retry_delays
@@ -717,6 +774,8 @@ Return ONLY this JSON format (no markdown, no code blocks):
                     f"→ {label} (attempt {attempt + 1}/{max_retries}), retrying in {delay}s...",
                     to_console=True,
                 )
+                if is_rate_limit:
+                    metrics.record_rate_limit_wait(delay)
                 await asyncio.sleep(delay)
                 last_error = e
                 continue

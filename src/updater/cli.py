@@ -9,6 +9,7 @@ from pathlib import Path
 
 from . import config
 from .claude_analyzer import verify_claude_auth
+from .claude_metrics import metrics
 from .docker_updater import update_dockerfile_images
 from .file_utils import condense_file_list
 from .git_operations import (
@@ -544,6 +545,9 @@ async def main_async() -> int:
         print(f"=== Updating {lang} Module: {module} ===\n")
         success, status = await process_module_with_retry(module, project_type=project_type)
         play_completion_sound()
+        summary = metrics.format_summary()
+        if summary:
+            print(f"\n{summary}")
         return 0 if success else 1
 
     else:
@@ -607,6 +611,10 @@ async def main_async() -> int:
             print(f"\n✗ Failed: {len(failed)}")
             for mod in failed:
                 print(f"  - {mod.name}")
+
+        summary = metrics.format_summary()
+        if summary:
+            print(f"\n{summary}")
 
         print("\n" + "=" * 70)
 
