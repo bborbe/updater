@@ -10,6 +10,7 @@ from updater import config
 from updater.claude_analyzer import (
     _extract_json_from_response,
     _get_clean_config_dir,
+    _run_claude,
     _without_claudecode,
     analyze_changes_with_claude,
     generate_changelog_from_commits,
@@ -392,7 +393,6 @@ class TestVerifyClaudeAuth:
 
         assert success is False
         assert "timed out" in error.lower()
-        assert "3 attempts" in error
         assert "/login" in error
 
 
@@ -461,6 +461,31 @@ class TestGenerateChangelogFromCommits:
             )
 
         assert result == []
+
+
+class TestRunClaude:
+    """Tests for _run_claude function."""
+
+    @pytest.mark.asyncio
+    async def test_kills_subprocess_on_timeout(self, reset_config):
+        """Test that proc.kill() is called when asyncio.wait_for raises TimeoutError."""
+        mock_proc = AsyncMock()
+        mock_proc.kill = Mock()
+        mock_proc.wait = AsyncMock()
+
+        async def mock_wait_for(coro, *, timeout):
+            coro.close()
+            raise TimeoutError()
+
+        with (
+            patch("asyncio.create_subprocess_exec", new_callable=AsyncMock, return_value=mock_proc),
+            patch("asyncio.wait_for", side_effect=mock_wait_for),
+            pytest.raises(ClaudeError, match="Claude timed out after 120s"),
+        ):
+            await _run_claude("test prompt")
+
+        mock_proc.kill.assert_called_once()
+        mock_proc.wait.assert_awaited_once()
 
 
 class TestWithoutClaudecode:

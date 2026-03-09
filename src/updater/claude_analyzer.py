@@ -151,7 +151,12 @@ async def _run_claude(
             cwd=cwd,
             env=env,
         )
-        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
+        try:
+            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
+        except TimeoutError:
+            proc.kill()
+            await proc.wait()
+            raise ClaudeError(f"Claude timed out after {timeout}s") from None
 
     if proc.returncode != 0:
         raise ClaudeError(f"Claude exited with code {proc.returncode}: {stderr.decode().strip()}")
