@@ -1,7 +1,12 @@
 ---
-status: approved
+status: completed
+summary: Replaced traceback.print_exc() with log_message(traceback.format_exc(), to_console=config.VERBOSE_MODE) in all three exception handlers so tracebacks are always written to the module log file.
+container: updater-014-log-tracebacks-always
+dark-factory-version: v0.30.17-dirty
 created: "2026-03-09T20:55:36Z"
 queued: "2026-03-09T20:55:36Z"
+started: "2026-03-09T20:59:48Z"
+completed: "2026-03-09T21:00:35Z"
 ---
 
 <summary>
