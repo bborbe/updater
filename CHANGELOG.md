@@ -8,6 +8,10 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## v0.17.11
+
+- Add test coverage for `log_manager.py` (`run_command`, `cleanup_old_logs`, `setup_module_logging`, `close_module_logging`, `log_message`) raising coverage from 68% to 100%
+
 ## v0.17.10
 
 - Replace `print()` calls in `ReleaseStep.run()` with `log_message(..., to_console=True)` so the release summary is captured in the per-module log file
