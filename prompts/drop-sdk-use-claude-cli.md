@@ -1,8 +1,5 @@
 ---
-created: "2026-03-09T20:11:17Z"
-queued: "2026-03-09T20:11:17Z"
-started: "2026-03-09T20:11:45Z"
-completed: "2026-03-09T20:11:59Z"
+status: created
 ---
 
 <summary>
@@ -10,6 +7,7 @@ completed: "2026-03-09T20:11:59Z"
 - Claude integration no longer returns empty responses when Claude uses tools
 - One fewer Python dependency to maintain and keep compatible
 - All four Claude-powered features (auth check, change analysis, release analysis, changelog generation) continue to work identically
+- Auth check (`verify_claude_auth`) simplified — no longer needs `suppress_sdk_cleanup_errors` exception handler wrapper
 - Retry logic, metrics tracking, and error handling behavior are unchanged
 - JSON response parsing (version bump, changelog, commit message) is unchanged
 </summary>
@@ -78,7 +76,7 @@ response_text = stdout.decode()
 
 **Callers** (all use `await`, keep functions async):
 - `cli.py`: `await verify_claude_auth()`
-- `pipeline.py`: `await analyze_changes_with_claude(...)`, `await analyze_unreleased_for_release(...)`, `await generate_changelog_from_commits(...)`
+- `pipeline.py`: `await analyze_changes_with_claude(...)`, `await analyze_unreleased_for_release(...)`, `await generate_changelog_from_commits(...)` (all three functions called)
 </context>
 
 <requirements>
@@ -102,7 +100,7 @@ response_text = stdout.decode()
        """
    ```
    Implementation:
-   - Build command: `["claude", "--print", "-p", prompt, "--model", model or config.MODEL, "--output-format", "text"]`
+   - Build command: `["claude", "--print", "-p", prompt, "--model", model or config.MODEL, "--output-format", "text"]` (`--output-format text` ensures plain text output instead of the CLI's default JSON-wrapped format)
    - Add `"--verbose"` if `config.VERBOSE_MODE`
    - Use `_without_claudecode()` context manager
    - Set `CLAUDE_CONFIG_DIR` from `_get_clean_config_dir()` in env
@@ -120,7 +118,7 @@ response_text = stdout.decode()
    - Keep the same prompt text (tool-based analysis with `cwd=module_path`)
    - Call `_run_claude(prompt, cwd=module_path, timeout=120)`
    - Keep the JSON extraction logic (code block parsing) unchanged
-   - Keep the retry loop with rate limit detection — detect retryable errors from stderr content or `ClaudeError` message
+   - Keep the retry loop with rate limit detection — detect retryable errors by checking stderr/error message for keywords like `"rate_limit"`, `"overloaded"`, `"timeout"` (preserve existing detection patterns from the current retry logic)
 
 4. Rewrite `analyze_unreleased_for_release()`:
    - Keep the same prompt text
@@ -149,10 +147,13 @@ response_text = stdout.decode()
    - Replace all `patch("updater.claude_analyzer.ClaudeSDKClient", ...)` with `patch("updater.claude_analyzer._run_claude", new_callable=AsyncMock)` that returns the expected response text
    - Update `test_uses_configured_model` and `test_strict_mcp_config_flag` — these tested SDK options. Replace with tests that verify `_run_claude` is called with correct arguments (model, cwd)
    - `test_multiple_text_blocks` — no longer relevant (CLI returns one text), remove it
+   - `test_changes_directory_context` (line 267) — remove or simplify; with subprocess `cwd=` there's no `os.chdir()` to test
    - Keep all JSON parsing tests (code block, surrounding text, invalid JSON, missing fields, defaults)
 
-9. Update `CHANGELOG.md` under `## Unreleased`:
+9. Update `CHANGELOG.md` — add a new `## Unreleased` section above `## v0.17.5` (create it if it doesn't exist):
    ```
+   ## Unreleased
+
    - Replace claude-code-sdk with direct CLI subprocess calls (fixes rate_limit_event crashes)
    ```
 </requirements>
