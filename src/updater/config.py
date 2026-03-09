@@ -14,6 +14,7 @@ MODEL: str | None = None  # Claude model to use (sonnet, opus, haiku)
 REQUIRE_CONFIRM = False  # Require user confirmation before commits
 NO_TAG = False  # Add to Unreleased instead of creating version/tag
 YES_MODE = False  # Auto-accept all prompts (non-interactive mode, for CI/containers)
+CHECK_COMMAND: str = ""  # Override precommit command (empty = use default "make precommit")
 
 # Go updater configuration
 GO_MAX_ITERATIONS = 10

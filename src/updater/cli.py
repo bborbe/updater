@@ -349,6 +349,12 @@ async def main_async() -> int:
         action="store_true",
         help="Auto-accept all prompts (non-interactive mode, for CI/containers)",
     )
+    parser.add_argument(
+        "--check-command",
+        default="",
+        metavar="CMD",
+        help='Override validation command (default: "make precommit"). Example: "make ensure test"',
+    )
 
     args = parser.parse_args()
 
@@ -358,6 +364,7 @@ async def main_async() -> int:
     config.REQUIRE_CONFIRM = args.require_commit_confirm
     config.NO_TAG = args.no_tag
     config.YES_MODE = args.yes
+    config.CHECK_COMMAND = args.check_command
     config.RUN_TIMESTAMP = datetime.now().strftime("%Y-%m-%d-%H%M%S")
 
     # Setup early logging before auth so failures are diagnosable
@@ -649,12 +656,19 @@ async def main_go_async() -> int:
         action="store_true",
         help="Auto-accept all prompts (non-interactive mode, for CI/containers)",
     )
+    parser.add_argument(
+        "--check-command",
+        default="",
+        metavar="CMD",
+        help='Override validation command (default: "make precommit"). Example: "make ensure test"',
+    )
 
     args = parser.parse_args()
     config.VERBOSE_MODE = args.verbose
     config.MODEL = args.model
     config.REQUIRE_CONFIRM = args.require_commit_confirm
     config.YES_MODE = args.yes
+    config.CHECK_COMMAND = args.check_command
     config.RUN_TIMESTAMP = datetime.now().strftime("%Y-%m-%d-%H%M%S")
 
     # Discover Go modules only
@@ -734,12 +748,19 @@ async def main_go_only_async() -> int:
         action="store_true",
         help="Auto-accept all prompts (non-interactive mode, for CI/containers)",
     )
+    parser.add_argument(
+        "--check-command",
+        default="",
+        metavar="CMD",
+        help='Override validation command (default: "make precommit"). Example: "make ensure test"',
+    )
 
     args = parser.parse_args()
     config.VERBOSE_MODE = args.verbose
     config.MODEL = args.model
     config.REQUIRE_CONFIRM = args.require_commit_confirm
     config.YES_MODE = args.yes
+    config.CHECK_COMMAND = args.check_command
     config.RUN_TIMESTAMP = datetime.now().strftime("%Y-%m-%d-%H%M%S")
 
     # Discover Go modules only
@@ -819,12 +840,19 @@ async def main_go_with_deps_async() -> int:
         action="store_true",
         help="Auto-accept all prompts (non-interactive mode, for CI/containers)",
     )
+    parser.add_argument(
+        "--check-command",
+        default="",
+        metavar="CMD",
+        help='Override validation command (default: "make precommit"). Example: "make ensure test"',
+    )
 
     args = parser.parse_args()
     config.VERBOSE_MODE = args.verbose
     config.MODEL = args.model
     config.REQUIRE_CONFIRM = args.require_commit_confirm
     config.YES_MODE = args.yes
+    config.CHECK_COMMAND = args.check_command
     config.RUN_TIMESTAMP = datetime.now().strftime("%Y-%m-%d-%H%M%S")
 
     # Discover Go modules only
@@ -906,12 +934,19 @@ async def main_python_async() -> int:
         action="store_true",
         help="Auto-accept all prompts (non-interactive mode, for CI/containers)",
     )
+    parser.add_argument(
+        "--check-command",
+        default="",
+        metavar="CMD",
+        help='Override validation command (default: "make precommit"). Example: "make ensure test"',
+    )
 
     args = parser.parse_args()
     config.VERBOSE_MODE = args.verbose
     config.MODEL = args.model
     config.REQUIRE_CONFIRM = args.require_commit_confirm
     config.YES_MODE = args.yes
+    config.CHECK_COMMAND = args.check_command
     config.RUN_TIMESTAMP = datetime.now().strftime("%Y-%m-%d-%H%M%S")
 
     # Discover Python modules only

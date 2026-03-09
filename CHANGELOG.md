@@ -8,6 +8,10 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## v0.16.0
+
+- feat: Add `--check-command` flag to override validation command (e.g. `make ensure test` for faster bulk updates)
+
 ## v0.15.1
 
 - use hatch-vcs for dynamic versioning from git tags

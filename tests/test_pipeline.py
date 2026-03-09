@@ -7,6 +7,7 @@ from updater.pipeline import (
     DockerCommitStep,
     GitConfirmStep,
     Pipeline,
+    PrecommitStep,
     ReleaseStep,
     Step,
     StepResult,
@@ -296,3 +297,67 @@ async def test_release_step_detects_missing_tag(tmp_path):
         assert ctx["new_version"] == "v0.5.2"
         assert ctx["tag_only"] is True
         assert ctx["commit_message"] == "Release v0.5.2"
+
+
+# ---------------------------------------------------------------------------
+# PrecommitStep - check-command override
+# ---------------------------------------------------------------------------
+
+
+async def test_custom_check_command_is_used(tmp_path):
+    """Test PrecommitStep uses custom command when CHECK_COMMAND is set."""
+    with (
+        patch("updater.pipeline.config") as mock_config,
+        patch("updater.pipeline.run_command") as mock_run_command,
+        patch("updater.pipeline.log_message"),
+    ):
+        mock_config.CHECK_COMMAND = "make ensure test"
+
+        step = PrecommitStep(project_type="go")
+        ctx = {}
+        result = await step.run(tmp_path, ctx)
+
+        assert result.status == StepStatus.SUCCESS
+        mock_run_command.assert_called_once()
+        call_args = mock_run_command.call_args
+        assert call_args[0][0] == "make ensure test"
+        assert call_args[1]["cwd"] == tmp_path
+        assert call_args[1]["quiet"] is True
+
+
+async def test_default_precommit_runs_when_no_override(tmp_path):
+    """Test PrecommitStep runs default precommit when CHECK_COMMAND is empty."""
+    with (
+        patch("updater.pipeline.config") as mock_config,
+        patch("updater.pipeline.run_command") as mock_run_command,
+        patch("updater.pipeline.run_go_precommit") as mock_go_precommit,
+        patch("updater.pipeline.log_message"),
+    ):
+        mock_config.CHECK_COMMAND = ""
+
+        step = PrecommitStep(project_type="go")
+        ctx = {}
+        result = await step.run(tmp_path, ctx)
+
+        assert result.status == StepStatus.SUCCESS
+        mock_run_command.assert_not_called()
+        mock_go_precommit.assert_called_once()
+        assert mock_go_precommit.call_args[0][0] == tmp_path
+
+
+async def test_check_command_failure_raises(tmp_path):
+    """Test PrecommitStep raises when custom command fails."""
+    with (
+        patch("updater.pipeline.config") as mock_config,
+        patch("updater.pipeline.run_command", side_effect=Exception("Command failed")),
+        patch("updater.pipeline.log_message"),
+    ):
+        mock_config.CHECK_COMMAND = "make failing-check"
+
+        step = PrecommitStep(project_type="go")
+        ctx = {}
+
+        import pytest
+
+        with pytest.raises(Exception, match="Command failed"):
+            await step.run(tmp_path, ctx)

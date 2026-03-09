@@ -34,7 +34,7 @@ from .git_operations import (
 from .go_updater import fix_osv_vulnerabilities, update_go_dependencies
 from .go_updater import run_precommit as run_go_precommit
 from .gomod_excludes import apply_gomod_excludes_and_replaces
-from .log_manager import log_message
+from .log_manager import log_message, run_command
 from .prompts import prompt_yes_no
 from .python_updater import run_precommit as run_python_precommit
 from .python_updater import update_python_dependencies
@@ -239,7 +239,10 @@ class PrecommitStep(Step):
         self._project_type = project_type
 
     async def run(self, module_path: Path, context: dict[str, Any]) -> StepResult:
-        if self._project_type == "python":
+        if config.CHECK_COMMAND:
+            log_message(f"→ Running custom check: {config.CHECK_COMMAND}", to_console=True)
+            run_command(config.CHECK_COMMAND, cwd=module_path, quiet=True, log_func=log_message)
+        elif self._project_type == "python":
             run_python_precommit(module_path, log_func=log_message)
         else:
             run_go_precommit(module_path, log_func=log_message)
