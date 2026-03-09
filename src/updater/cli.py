@@ -144,8 +144,7 @@ async def process_single_go_module(module_path: Path, update_deps: bool = True) 
 
     except Exception as e:
         log_message(f"\n✗ Error processing {module_path}: {e}", to_console=True)
-        if config.VERBOSE_MODE:
-            traceback.print_exc()
+        log_message(traceback.format_exc(), to_console=config.VERBOSE_MODE)
         return (False, "failed")
     finally:
         # Close logging and cleanup old logs
@@ -224,8 +223,7 @@ async def process_single_python_module(module_path: Path) -> tuple[bool, str]:
 
     except Exception as e:
         log_message(f"\n✗ Error processing {module_path}: {e}", to_console=True)
-        if config.VERBOSE_MODE:
-            traceback.print_exc()
+        log_message(traceback.format_exc(), to_console=config.VERBOSE_MODE)
         return (False, "failed")
     finally:
         close_module_logging()
@@ -1137,8 +1135,7 @@ async def process_release_module(module_path: Path) -> tuple[bool, str]:
 
     except Exception as e:
         log_message(f"\n✗ Error processing {module_path}: {e}", to_console=True)
-        if config.VERBOSE_MODE:
-            traceback.print_exc()
+        log_message(traceback.format_exc(), to_console=config.VERBOSE_MODE)
         return (False, "failed")
     finally:
         close_module_logging()
