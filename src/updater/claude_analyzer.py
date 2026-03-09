@@ -198,7 +198,8 @@ async def _verify_claude_auth_impl() -> tuple[bool, str]:
 
     # Retry logic for timeout errors
     max_retries = 3
-    retry_delays = [2, 5, 10]  # seconds - exponential backoff
+    retry_delays = [2, 5, 10]
+    rate_limit_delays = [30, 60, 90]
 
     for attempt in range(max_retries):
         try:
@@ -240,12 +241,20 @@ async def _verify_claude_auth_impl() -> tuple[bool, str]:
             # Check if it's a timeout or connection error worth retrying
             is_retryable = isinstance(e, asyncio.TimeoutError) or any(
                 keyword in error_str.lower()
-                for keyword in ["timeout", "control request", "connection", "initialize"]
+                for keyword in [
+                    "timeout",
+                    "control request",
+                    "connection",
+                    "initialize",
+                    "rate_limit",
+                ]
             )
 
+            is_rate_limit = "rate_limit" in error_str
+
             if is_retryable and attempt < max_retries - 1:
-                delay = retry_delays[attempt]
-                # Note: No logging here since this is called during startup
+                delays = rate_limit_delays if is_rate_limit else retry_delays
+                delay = delays[attempt]
                 await asyncio.sleep(delay)
                 continue
             else:
@@ -334,7 +343,8 @@ Return ONLY this JSON format (no markdown, no code blocks):
 
     # Retry logic for timeout errors
     max_retries = 3
-    retry_delays = [2, 5, 10]  # seconds - exponential backoff
+    retry_delays = [2, 5, 10]
+    rate_limit_delays = [30, 60, 90]
 
     last_error = None
     for attempt in range(max_retries):
@@ -398,14 +408,23 @@ Return ONLY this JSON format (no markdown, no code blocks):
             # Check if it's a timeout or connection error worth retrying
             is_retryable = any(
                 keyword in error_str
-                for keyword in ["timeout", "control request", "connection", "initialize"]
+                for keyword in [
+                    "timeout",
+                    "control request",
+                    "connection",
+                    "initialize",
+                    "rate_limit",
+                ]
             )
 
+            is_rate_limit = "rate_limit" in error_str
+
             if is_retryable and attempt < max_retries - 1:
-                delay = retry_delays[attempt]
+                delays = rate_limit_delays if is_rate_limit else retry_delays
+                delay = delays[attempt]
+                label = "Rate limited" if is_rate_limit else "Retryable error"
                 log_func(
-                    f"→ Timeout error (attempt {attempt + 1}/{max_retries}), "
-                    f"retrying in {delay}s...",
+                    f"→ {label} (attempt {attempt + 1}/{max_retries}), retrying in {delay}s...",
                     to_console=True,
                 )
                 await asyncio.sleep(delay)
@@ -482,6 +501,7 @@ Return ONLY this JSON format (no markdown, no code blocks):
 
     max_retries = 3
     retry_delays = [2, 5, 10]
+    rate_limit_delays = [30, 60, 90]
 
     last_error = None
     for attempt in range(max_retries):
@@ -540,14 +560,23 @@ Return ONLY this JSON format (no markdown, no code blocks):
             error_str = str(e).lower()
             is_retryable = any(
                 keyword in error_str
-                for keyword in ["timeout", "control request", "connection", "initialize"]
+                for keyword in [
+                    "timeout",
+                    "control request",
+                    "connection",
+                    "initialize",
+                    "rate_limit",
+                ]
             )
 
+            is_rate_limit = "rate_limit" in error_str
+
             if is_retryable and attempt < max_retries - 1:
-                delay = retry_delays[attempt]
+                delays = rate_limit_delays if is_rate_limit else retry_delays
+                delay = delays[attempt]
+                label = "Rate limited" if is_rate_limit else "Retryable error"
                 log_func(
-                    f"→ Timeout error (attempt {attempt + 1}/{max_retries}), "
-                    f"retrying in {delay}s...",
+                    f"→ {label} (attempt {attempt + 1}/{max_retries}), retrying in {delay}s...",
                     to_console=True,
                 )
                 await asyncio.sleep(delay)
@@ -611,6 +640,7 @@ Return ONLY this JSON format (no markdown, no code blocks):
 
     max_retries = 3
     retry_delays = [2, 5, 10]
+    rate_limit_delays = [30, 60, 90]
 
     last_error = None
     for attempt in range(max_retries):
@@ -668,14 +698,23 @@ Return ONLY this JSON format (no markdown, no code blocks):
             error_str = str(e).lower()
             is_retryable = any(
                 keyword in error_str
-                for keyword in ["timeout", "control request", "connection", "initialize"]
+                for keyword in [
+                    "timeout",
+                    "control request",
+                    "connection",
+                    "initialize",
+                    "rate_limit",
+                ]
             )
 
+            is_rate_limit = "rate_limit" in error_str
+
             if is_retryable and attempt < max_retries - 1:
-                delay = retry_delays[attempt]
+                delays = rate_limit_delays if is_rate_limit else retry_delays
+                delay = delays[attempt]
+                label = "Rate limited" if is_rate_limit else "Retryable error"
                 log_func(
-                    f"→ Timeout error (attempt {attempt + 1}/{max_retries}), "
-                    f"retrying in {delay}s...",
+                    f"→ {label} (attempt {attempt + 1}/{max_retries}), retrying in {delay}s...",
                     to_console=True,
                 )
                 await asyncio.sleep(delay)
