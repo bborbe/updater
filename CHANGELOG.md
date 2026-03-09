@@ -8,6 +8,10 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## v0.17.5
+
+- Refactor Claude analysis to use built-in tools instead of embedding diffs in prompt
+
 ## v0.17.4
 
 - Handle unknown SDK message types (e.g. rate_limit_event) without crashing

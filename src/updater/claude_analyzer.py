@@ -24,10 +24,6 @@ from .claude_metrics import metrics
 from .exceptions import ClaudeError
 from .log_manager import log_message
 
-# Limits to prevent buffer overflow in Claude SDK (1MB limit)
-MAX_DIFF_PER_FILE = 50_000  # 50KB per file
-MAX_TOTAL_DIFF = 200_000  # 200KB total
-
 
 async def _safe_receive(response: AsyncIterator[Any]) -> AsyncIterator[Any]:
     """Yield messages from SDK response, skipping unknown message types.
@@ -79,70 +75,6 @@ def _run_git_command(args: list[str], cwd: Path) -> str:
         return result.stdout.strip()
     except subprocess.TimeoutExpired, subprocess.SubprocessError:
         return ""
-
-
-def _truncate_diff(diff: str, max_size: int, label: str = "") -> str:
-    """Truncate diff to max_size with indicator."""
-    if len(diff) <= max_size:
-        return diff
-    truncated = diff[:max_size]
-    # Try to end at a newline for cleaner output
-    last_newline = truncated.rfind("\n")
-    if last_newline > max_size * 0.8:
-        truncated = truncated[:last_newline]
-    suffix = f"\n... [truncated {label}, {len(diff) - len(truncated)} bytes omitted]"
-    return truncated + suffix
-
-
-def _get_diff_base(cwd: Path) -> str:
-    """Get the comparison base (latest tag or empty for uncommitted)."""
-    tag = _run_git_command(["describe", "--tags", "--abbrev=0"], cwd)
-    return tag if tag else ""
-
-
-def _collect_diffs(module_path: Path) -> dict[str, str]:
-    """Pre-collect and truncate all diffs for analysis."""
-    base = _get_diff_base(module_path)
-    base_args = [base] if base else []
-
-    diffs: dict[str, str] = {}
-    total_size = 0
-
-    # Dependency files to check
-    dep_files = ["go.mod", "go.sum", "package.json", "pyproject.toml", "Dockerfile"]
-
-    for dep_file in dep_files:
-        if (module_path / dep_file).exists() or dep_file in ["go.mod", "go.sum"]:
-            diff = _run_git_command(
-                ["diff", "--no-color"] + base_args + ["--", dep_file], module_path
-            )
-            if diff:
-                diff = _truncate_diff(diff, MAX_DIFF_PER_FILE, dep_file)
-                diffs[dep_file] = diff
-                total_size += len(diff)
-
-    # General code diff (excluding vendor/node_modules and large generated files)
-    remaining_budget = MAX_TOTAL_DIFF - total_size
-    if remaining_budget > 10000:  # Only if we have reasonable budget left
-        code_diff = _run_git_command(
-            ["diff", "--no-color"]
-            + base_args
-            + [
-                "--",
-                ".",
-                ":(exclude)node_modules/**",
-                ":(exclude)vendor/**",
-                ":(exclude)**/mocks/**",
-                ":(exclude)**/*_mock.go",
-                ":(exclude)**/*.gen.go",
-            ],
-            module_path,
-        )
-        if code_diff:
-            code_diff = _truncate_diff(code_diff, remaining_budget, "code changes")
-            diffs["code_changes"] = code_diff
-
-    return diffs
 
 
 def _get_clean_config_dir() -> Path | None:
@@ -329,25 +261,15 @@ async def analyze_changes_with_claude(
         ClaudeError: If Claude analysis fails after all retries
     """
     log_func("\n=== Phase 3: Analyze Changes with Claude ===", to_console=True)
-    log_func("→ Collecting diffs...", to_console=config.VERBOSE_MODE)
-
-    # Pre-collect diffs to avoid Claude SDK buffer overflow
-    diffs = _collect_diffs(module_path)
-    base = _get_diff_base(module_path)
-    base_info = f"Comparing against tag: {base}" if base else "Comparing uncommitted changes"
-
-    # Build diff section for prompt
-    diff_sections = []
-    for name, diff in diffs.items():
-        diff_sections.append(f"=== {name} ===\n{diff}")
-    all_diffs = "\n\n".join(diff_sections) if diff_sections else "(no changes detected)"
-
     log_func("→ Analyzing changes...", to_console=config.VERBOSE_MODE)
 
-    prompt = f"""Analyze these git changes and determine the appropriate version bump.
+    prompt = f"""You are in {module_path}. Analyze the git changes in this module and determine the appropriate version bump.
 
-Module: {module_path.name}
-{base_info}
+Steps:
+1. Find the latest git tag: git describe --tags --abbrev=0
+2. Run git diff against that tag to see what changed (exclude go.sum, vendor/, node_modules/, mocks/, *_mock.go, *.gen.go)
+3. Focus on go.mod for dependency changes and source code for logic changes
+4. Determine version bump and generate changelog
 
 Version Bump Decision Rules:
 1. **DEPENDENCY CHANGES = AT LEAST PATCH**
@@ -361,21 +283,13 @@ Version Bump Decision Rules:
 3. **NONE**: ONLY when there are ZERO dependency updates AND ZERO code changes
    - Examples: .gitignore, README.md, Makefile, docs/
 
-Here are the diffs (truncated if large, generated files excluded):
-
-{all_diffs}
-
 Task:
-1. Determine version bump based on the diffs above
+1. Determine version bump based on the changes
 2. Create 2-5 concise changelog bullet points
 3. Suggest a brief commit message (max 50 chars)
 
 Return ONLY this JSON format (no markdown, no code blocks):
-{{
-  "version_bump": "patch|minor|major|none",
-  "changelog": ["bullet 1", "bullet 2"],
-  "commit_message": "short message"
-}}"""
+{{"version_bump": "patch|minor|major|none", "changelog": ["bullet 1", "bullet 2"], "commit_message": "short message"}}"""
 
     # Retry logic for timeout errors
     max_retries = 3
@@ -395,6 +309,7 @@ Return ONLY this JSON format (no markdown, no code blocks):
                 options = ClaudeCodeOptions(
                     model=config.MODEL,
                     env=env,
+                    cwd=str(module_path),
                     extra_args={"strict-mcp-config": None},
                 )
 
