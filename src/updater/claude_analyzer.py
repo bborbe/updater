@@ -6,7 +6,7 @@ import os
 import shutil
 import subprocess
 import time
-from collections.abc import Callable, Generator
+from collections.abc import AsyncIterator, Callable, Generator
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
@@ -17,6 +17,7 @@ from claude_code_sdk import (
     ClaudeSDKClient,
     TextBlock,
 )
+from claude_code_sdk._errors import MessageParseError
 
 from . import config
 from .claude_metrics import metrics
@@ -26,6 +27,24 @@ from .log_manager import log_message
 # Limits to prevent buffer overflow in Claude SDK (1MB limit)
 MAX_DIFF_PER_FILE = 50_000  # 50KB per file
 MAX_TOTAL_DIFF = 200_000  # 200KB total
+
+
+async def _safe_receive(response: AsyncIterator[Any]) -> AsyncIterator[Any]:
+    """Yield messages from SDK response, skipping unknown message types.
+
+    The claude-code-sdk raises MessageParseError for unrecognized message
+    types (e.g. rate_limit_event). This wrapper catches those errors so
+    the caller can process all recognized messages without crashing.
+    """
+    it = response.__aiter__()
+    while True:
+        try:
+            message = await it.__anext__()
+            yield message
+        except StopAsyncIteration:
+            break
+        except MessageParseError:
+            continue
 
 
 def _short_path(p: Path) -> str:
@@ -220,7 +239,7 @@ async def _verify_claude_auth_impl() -> tuple[bool, str]:
                 async def _do_auth_check(opts: ClaudeCodeOptions) -> bool:
                     async with ClaudeSDKClient(options=opts) as client:
                         await client.query("Reply with exactly: ok")
-                        async for message in client.receive_response():
+                        async for message in _safe_receive(client.receive_response()):
                             if isinstance(message, AssistantMessage):
                                 for block in message.content:
                                     if isinstance(block, TextBlock):
@@ -385,7 +404,7 @@ Return ONLY this JSON format (no markdown, no code blocks):
                 async with ClaudeSDKClient(options=options) as client:
                     await client.query(prompt)
 
-                    async for message in client.receive_response():
+                    async for message in _safe_receive(client.receive_response()):
                         if isinstance(message, AssistantMessage):
                             for block in message.content:
                                 if isinstance(block, TextBlock):
@@ -553,7 +572,7 @@ Return ONLY this JSON format (no markdown, no code blocks):
                 async with ClaudeSDKClient(options=options) as client:
                     await client.query(prompt)
 
-                    async for message in client.receive_response():
+                    async for message in _safe_receive(client.receive_response()):
                         if isinstance(message, AssistantMessage):
                             for block in message.content:
                                 if isinstance(block, TextBlock):
@@ -707,7 +726,7 @@ Return ONLY this JSON format (no markdown, no code blocks):
                 async with ClaudeSDKClient(options=options) as client:
                     await client.query(prompt)
 
-                    async for message in client.receive_response():
+                    async for message in _safe_receive(client.receive_response()):
                         if isinstance(message, AssistantMessage):
                             for block in message.content:
                                 if isinstance(block, TextBlock):

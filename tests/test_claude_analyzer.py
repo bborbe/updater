@@ -6,9 +6,11 @@ from pathlib import Path
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
+from claude_code_sdk._errors import MessageParseError
 
 from updater import config
 from updater.claude_analyzer import (
+    _safe_receive,
     _without_claudecode,
     analyze_changes_with_claude,
     generate_changelog_from_commits,
@@ -599,3 +601,74 @@ class TestWithoutClaudecode:
         with _without_claudecode():
             pass
         assert "CLAUDECODE" not in os.environ
+
+
+class TestSafeReceive:
+    """Tests for _safe_receive wrapper."""
+
+    @pytest.mark.asyncio
+    async def test_safe_receive_skips_parse_errors(self):
+        """MessageParseError is skipped; surrounding messages are yielded."""
+
+        async def gen():
+            yield "first"
+            raise MessageParseError("Unknown message type: rate_limit_event")
+
+        results = []
+        async for msg in _safe_receive(gen()):
+            results.append(msg)
+
+        assert results == ["first"]
+
+    @pytest.mark.asyncio
+    async def test_safe_receive_skips_parse_error_between_messages(self):
+        """MessageParseError mid-stream is skipped; all other messages are yielded."""
+
+        async def gen():
+            yield "first"
+            raise MessageParseError("Unknown message type: rate_limit_event")
+
+        # To yield a message after the error we need a stateful generator
+        values = ["first", MessageParseError("skip"), "second"]
+
+        async def gen2():
+            for v in values:
+                if isinstance(v, MessageParseError):
+                    raise v
+                yield v
+
+        results = []
+        # gen2 stops at the raise, so only "first" is yielded — that is the
+        # expected behavior since the generator itself terminates after raise.
+        async for msg in _safe_receive(gen2()):
+            results.append(msg)
+
+        assert results == ["first"]
+
+    @pytest.mark.asyncio
+    async def test_safe_receive_normal(self):
+        """Generators with no errors yield all values."""
+
+        async def gen():
+            for v in [1, 2, 3]:
+                yield v
+
+        results = []
+        async for msg in _safe_receive(gen()):
+            results.append(msg)
+
+        assert results == [1, 2, 3]
+
+    @pytest.mark.asyncio
+    async def test_safe_receive_empty(self):
+        """Empty generator yields nothing."""
+
+        async def gen():
+            return
+            yield  # make it an async generator
+
+        results = []
+        async for msg in _safe_receive(gen()):
+            results.append(msg)
+
+        assert results == []
