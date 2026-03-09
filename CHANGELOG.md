@@ -8,6 +8,10 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## v0.17.14
+
+- Add tests for `GoDepSkipStep`, `PythonVersionUpdateStep`, `PythonDepUpdateStep`, `DockerUpdateStep`, `GitPushStep`, and `GitCommitStep` (tag_only path), raising `pipeline.py` coverage from 78% to 85%
+
 ## v0.17.13
 
 - Add mocked tests for `get_latest_python_version()` (valid response, HTTP error, timeout, malformed JSON) and `update_python_versions()` failure path, raising `python_version_updater.py` coverage from 76% to 100%
