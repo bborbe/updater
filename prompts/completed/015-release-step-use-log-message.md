@@ -1,7 +1,12 @@
 ---
-status: approved
+status: completed
+summary: Replaced all print() calls in ReleaseStep.run() with log_message(..., to_console=True) so the release summary is captured in the per-module log file
+container: updater-015-release-step-use-log-message
+dark-factory-version: v0.30.17-dirty
 created: "2026-03-09T20:55:36Z"
 queued: "2026-03-09T20:55:36Z"
+started: "2026-03-09T21:00:38Z"
+completed: "2026-03-09T21:01:08Z"
 ---
 
 <summary>
