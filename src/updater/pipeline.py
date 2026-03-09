@@ -555,16 +555,19 @@ class ReleaseStep(Step):
         log_message(f"  New version: {new_version}", to_console=True)
 
         # Show summary
-        print("\n" + "=" * 60)
-        print(f"READY TO RELEASE: {module_path.name}")
-        print("=" * 60)
-        print(f"Version:        {old_version} → {new_version} ({analysis['version_bump']} bump)")
-        print(f"Commit message: Release {new_version}")
-        print(f"Git tag:        {new_version}")
-        print("\nUnreleased entries:")
+        log_message("\n" + "=" * 60, to_console=True)
+        log_message(f"READY TO RELEASE: {module_path.name}", to_console=True)
+        log_message("=" * 60, to_console=True)
+        log_message(
+            f"Version:        {old_version} → {new_version} ({analysis['version_bump']} bump)",
+            to_console=True,
+        )
+        log_message(f"Commit message: Release {new_version}", to_console=True)
+        log_message(f"Git tag:        {new_version}", to_console=True)
+        log_message("\nUnreleased entries:", to_console=True)
         for entry in entries:
-            print(f"  {entry}")
-        print("=" * 60)
+            log_message(f"  {entry}", to_console=True)
+        log_message("=" * 60, to_console=True)
 
         if config.REQUIRE_CONFIRM:
             if not prompt_yes_no("\nProceed with release?", default_yes=True):
