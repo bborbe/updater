@@ -8,6 +8,10 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## Unreleased
+
+- Add tests for `process_single_python_module()`, `process_release_module()`, `process_release_with_retry()`, docker project type in `process_module_with_retry()`, auth failure, `--skip-git-update`, git status error, multi-module summary, and explicit entry points (`main_go_async`, `main_go_only_async`, `main_go_with_deps_async`, `main_python_async`, `main_docker_async`, `main_release_async`) in `cli.py`, raising coverage from 39% to 94%
+
 ## v0.17.17
 
 - Add tests for `_get_clean_config_dir()`, `_verify_claude_auth_impl()`, `analyze_unreleased_for_release()`, and `generate_changelog_from_commits()` in `claude_analyzer.py`, raising coverage from 65% to 85%
