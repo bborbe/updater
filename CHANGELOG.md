@@ -8,6 +8,10 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## v0.17.12
+
+- Fix syntax error in `version_updater.py` (missing parentheses in `except` clauses) and add mocked tests for `get_latest_golang_version()`, `get_latest_alpine_version()`, and `update_versions()`, raising coverage from 73% to 97%
+
 ## v0.17.11
 
 - Add test coverage for `log_manager.py` (`run_command`, `cleanup_old_logs`, `setup_module_logging`, `close_module_logging`, `log_message`) raising coverage from 68% to 100%

@@ -1,5 +1,11 @@
 """Tests for version updater."""
 
+import json
+from unittest.mock import MagicMock, patch
+
+import httpx
+import yaml
+
 from updater.version_updater import (
     get_latest_alpine_version,
     get_latest_golang_version,
@@ -7,6 +13,7 @@ from updater.version_updater import (
     update_dockerfile_golang,
     update_github_workflows_golang,
     update_gomod_version,
+    update_versions,
 )
 
 
@@ -24,6 +31,215 @@ def test_get_latest_alpine_version():
     assert version is not None
     assert len(version.split(".")) == 2  # major.minor only
     assert version[0].isdigit()
+
+
+# --- Mocked tests for get_latest_golang_version ---
+
+
+def test_get_latest_golang_version_success():
+    """Mock valid JSON response returns stripped version string."""
+    mock_response = MagicMock()
+    mock_response.text = json.dumps([{"version": "go1.23.5"}])
+    mock_response.raise_for_status.return_value = None
+
+    with patch("updater.version_updater.httpx.get", return_value=mock_response):
+        result = get_latest_golang_version()
+
+    assert result == "1.23.5"
+
+
+def test_get_latest_golang_version_http_error():
+    """HTTP error returns None."""
+    with patch(
+        "updater.version_updater.httpx.get",
+        side_effect=httpx.HTTPError("connection failed"),
+    ):
+        result = get_latest_golang_version()
+
+    assert result is None
+
+
+def test_get_latest_golang_version_timeout():
+    """Timeout returns None."""
+    with patch(
+        "updater.version_updater.httpx.get",
+        side_effect=httpx.TimeoutException("timeout"),
+    ):
+        result = get_latest_golang_version()
+
+    assert result is None
+
+
+def test_get_latest_golang_version_json_parse_error():
+    """Invalid JSON returns None."""
+    mock_response = MagicMock()
+    mock_response.text = "not valid json"
+    mock_response.raise_for_status.return_value = None
+
+    with patch("updater.version_updater.httpx.get", return_value=mock_response):
+        result = get_latest_golang_version()
+
+    assert result is None
+
+
+def test_get_latest_golang_version_empty_list():
+    """Empty list response returns None."""
+    mock_response = MagicMock()
+    mock_response.text = json.dumps([])
+    mock_response.raise_for_status.return_value = None
+
+    with patch("updater.version_updater.httpx.get", return_value=mock_response):
+        result = get_latest_golang_version()
+
+    assert result is None
+
+
+# --- Mocked tests for get_latest_alpine_version ---
+
+
+def test_get_latest_alpine_version_success():
+    """Mock valid YAML response returns major.minor version string."""
+    releases = [{"flavor": "alpine-minirootfs", "version": "3.20.3"}]
+    mock_response = MagicMock()
+    mock_response.text = yaml.dump(releases)
+    mock_response.raise_for_status.return_value = None
+
+    with patch("updater.version_updater.httpx.get", return_value=mock_response):
+        result = get_latest_alpine_version()
+
+    assert result == "3.20"
+
+
+def test_get_latest_alpine_version_http_error():
+    """HTTP error returns None."""
+    with patch(
+        "updater.version_updater.httpx.get",
+        side_effect=httpx.HTTPError("connection failed"),
+    ):
+        result = get_latest_alpine_version()
+
+    assert result is None
+
+
+def test_get_latest_alpine_version_timeout():
+    """Timeout returns None."""
+    with patch(
+        "updater.version_updater.httpx.get",
+        side_effect=httpx.TimeoutException("timeout"),
+    ):
+        result = get_latest_alpine_version()
+
+    assert result is None
+
+
+def test_get_latest_alpine_version_yaml_parse_error():
+    """Invalid YAML returns None."""
+    mock_response = MagicMock()
+    mock_response.text = ":\ninvalid: yaml: ]["
+    mock_response.raise_for_status.return_value = None
+
+    with patch("updater.version_updater.httpx.get", return_value=mock_response):
+        result = get_latest_alpine_version()
+
+    assert result is None
+
+
+def test_get_latest_alpine_version_no_minirootfs_flavor():
+    """YAML without alpine-minirootfs flavor returns None."""
+    releases = [{"flavor": "other-flavor", "version": "3.20.3"}]
+    mock_response = MagicMock()
+    mock_response.text = yaml.dump(releases)
+    mock_response.raise_for_status.return_value = None
+
+    with patch("updater.version_updater.httpx.get", return_value=mock_response):
+        result = get_latest_alpine_version()
+
+    assert result is None
+
+
+# --- Mocked tests for update_versions ---
+
+
+def test_update_versions_both_succeed_with_updates(tmp_path):
+    """Both golang and alpine fetched; sub-updaters run; returns True when files updated."""
+    dockerfile = tmp_path / "Dockerfile"
+    dockerfile.write_text("FROM golang:1.22.0\nFROM alpine:3.19\n")
+
+    with (
+        patch("updater.version_updater.get_latest_golang_version", return_value="1.23.5"),
+        patch("updater.version_updater.get_latest_alpine_version", return_value="3.20"),
+    ):
+        result = update_versions(tmp_path)
+
+    assert result is True
+    content = dockerfile.read_text()
+    assert "golang:1.23.5" in content
+    assert "alpine:3.20" in content
+
+
+def test_update_versions_no_updates_needed(tmp_path):
+    """All versions already current; returns False."""
+    dockerfile = tmp_path / "Dockerfile"
+    dockerfile.write_text("FROM golang:1.23.5\nFROM alpine:3.20\n")
+
+    with (
+        patch("updater.version_updater.get_latest_golang_version", return_value="1.23.5"),
+        patch("updater.version_updater.get_latest_alpine_version", return_value="3.20"),
+    ):
+        result = update_versions(tmp_path)
+
+    assert result is False
+
+
+def test_update_versions_golang_fetch_fails(tmp_path):
+    """Golang fetch returns None; logs warning; alpine still processed."""
+    dockerfile = tmp_path / "Dockerfile"
+    dockerfile.write_text("FROM alpine:3.19\n")
+
+    log_calls = []
+
+    def capture_log(msg, **kwargs):
+        log_calls.append(msg)
+
+    with (
+        patch("updater.version_updater.get_latest_golang_version", return_value=None),
+        patch("updater.version_updater.get_latest_alpine_version", return_value="3.20"),
+    ):
+        result = update_versions(tmp_path, log_func=capture_log)
+
+    assert result is True
+    assert any("golang" in msg.lower() for msg in log_calls)
+
+
+def test_update_versions_alpine_fetch_fails(tmp_path):
+    """Alpine fetch returns None; logs warning; golang still processed."""
+    dockerfile = tmp_path / "Dockerfile"
+    dockerfile.write_text("FROM golang:1.22.0\n")
+
+    log_calls = []
+
+    def capture_log(msg, **kwargs):
+        log_calls.append(msg)
+
+    with (
+        patch("updater.version_updater.get_latest_golang_version", return_value="1.23.5"),
+        patch("updater.version_updater.get_latest_alpine_version", return_value=None),
+    ):
+        result = update_versions(tmp_path, log_func=capture_log)
+
+    assert result is True
+    assert any("alpine" in msg.lower() for msg in log_calls)
+
+
+def test_update_versions_both_fetch_fail(tmp_path):
+    """Both fetches return None; returns False."""
+    with (
+        patch("updater.version_updater.get_latest_golang_version", return_value=None),
+        patch("updater.version_updater.get_latest_alpine_version", return_value=None),
+    ):
+        result = update_versions(tmp_path)
+
+    assert result is False
 
 
 def test_update_dockerfile_golang(tmp_path):
