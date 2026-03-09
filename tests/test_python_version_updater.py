@@ -1,5 +1,8 @@
 """Tests for Python version updater."""
 
+from unittest.mock import MagicMock, patch
+
+import httpx
 import pytest
 
 from updater.python_version_updater import (
@@ -278,6 +281,79 @@ python_version = "3.11"
 
     dockerfile_content = dockerfile.read_text()
     assert f"FROM python:{latest}-slim" in dockerfile_content
+
+
+def test_get_latest_python_version_valid_response():
+    """Test get_latest_python_version with a valid API response."""
+    mock_releases = [
+        {"name": "Python 3.12.1"},
+        {"name": "Python 3.11.8"},
+        {"name": "Python 3.13.0"},
+        {"name": "Python 2.7.18"},  # Should be ignored (not Python 3)
+        {"name": "Not a Python release"},  # Should be ignored
+    ]
+    mock_response = MagicMock()
+    mock_response.json.return_value = mock_releases
+    mock_response.raise_for_status.return_value = None
+
+    with patch("httpx.get", return_value=mock_response):
+        result = get_latest_python_version()
+
+    assert result == "3.13"
+
+
+def test_get_latest_python_version_http_error():
+    """Test get_latest_python_version when HTTP error occurs."""
+    mock_response = MagicMock()
+    mock_response.raise_for_status.side_effect = httpx.HTTPStatusError(
+        "error", request=MagicMock(), response=MagicMock()
+    )
+
+    with patch("httpx.get", return_value=mock_response):
+        result = get_latest_python_version()
+
+    assert result is None
+
+
+def test_get_latest_python_version_timeout():
+    """Test get_latest_python_version when a timeout occurs."""
+    with patch("httpx.get", side_effect=httpx.ReadTimeout("timeout")):
+        result = get_latest_python_version()
+
+    assert result is None
+
+
+def test_get_latest_python_version_malformed_json():
+    """Test get_latest_python_version when response JSON is malformed."""
+    mock_response = MagicMock()
+    mock_response.raise_for_status.return_value = None
+    mock_response.json.side_effect = ValueError("invalid json")
+
+    with patch("httpx.get", return_value=mock_response):
+        result = get_latest_python_version()
+
+    assert result is None
+
+
+def test_get_latest_python_version_empty_list():
+    """Test get_latest_python_version when API returns empty list."""
+    mock_response = MagicMock()
+    mock_response.json.return_value = []
+    mock_response.raise_for_status.return_value = None
+
+    with patch("httpx.get", return_value=mock_response):
+        result = get_latest_python_version()
+
+    assert result is None
+
+
+def test_update_python_versions_fetch_fails(tmp_path, monkeypatch):
+    """Test update_python_versions returns False when version fetch fails (lines 194-195)."""
+    monkeypatch.setattr("updater.python_version_updater.get_latest_python_version", lambda: None)
+
+    result = update_python_versions(tmp_path)
+
+    assert result is False
 
 
 def test_update_python_versions_no_changes_needed(tmp_path, monkeypatch):

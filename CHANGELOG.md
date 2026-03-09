@@ -8,6 +8,10 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## v0.17.13
+
+- Add mocked tests for `get_latest_python_version()` (valid response, HTTP error, timeout, malformed JSON) and `update_python_versions()` failure path, raising `python_version_updater.py` coverage from 76% to 100%
+
 ## v0.17.12
 
 - Fix syntax error in `version_updater.py` (missing parentheses in `except` clauses) and add mocked tests for `get_latest_golang_version()`, `get_latest_alpine_version()`, and `update_versions()`, raising coverage from 73% to 97%
