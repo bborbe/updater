@@ -43,6 +43,7 @@ env/
 
 # MCP
 .mcp.json
+/.coverage
 
 # Claude Code
 /.claude/
