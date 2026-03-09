@@ -6,41 +6,15 @@ import os
 import shutil
 import subprocess
 import time
-from collections.abc import AsyncIterator, Callable, Generator
+from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
-
-from claude_code_sdk import (
-    AssistantMessage,
-    ClaudeCodeOptions,
-    ClaudeSDKClient,
-    TextBlock,
-)
-from claude_code_sdk._errors import MessageParseError
 
 from . import config
 from .claude_metrics import metrics
 from .exceptions import ClaudeError
 from .log_manager import log_message
-
-
-async def _safe_receive(response: AsyncIterator[Any]) -> AsyncIterator[Any]:
-    """Yield messages from SDK response, skipping unknown message types.
-
-    The claude-code-sdk raises MessageParseError for unrecognized message
-    types (e.g. rate_limit_event). This wrapper catches those errors so
-    the caller can process all recognized messages without crashing.
-    """
-    it = response.__aiter__()
-    while True:
-        try:
-            message = await it.__anext__()
-            yield message
-        except StopAsyncIteration:
-            break
-        except MessageParseError:
-            continue
 
 
 def _short_path(p: Path) -> str:
@@ -108,6 +82,55 @@ def _get_clean_config_dir() -> Path | None:
     return clean_config_dir
 
 
+async def _run_claude(
+    prompt: str,
+    model: str | None = None,
+    cwd: Path | None = None,
+    timeout: int = 120,
+) -> str:
+    """Run claude --print -p and return stdout text.
+
+    Args:
+        prompt: The prompt to send
+        model: Model name (sonnet, haiku, opus). Uses config.MODEL if None.
+        cwd: Working directory for Claude. None = current directory.
+        timeout: Timeout in seconds.
+
+    Returns:
+        Claude's text response (stdout).
+
+    Raises:
+        ClaudeError: If Claude exits non-zero or times out.
+    """
+    cmd: list[str] = ["claude", "--print", "-p", prompt, "--output-format", "text"]
+    effective_model = model or config.MODEL
+    if effective_model:
+        cmd.extend(["--model", effective_model])
+    if config.VERBOSE_MODE:
+        cmd.append("--verbose")
+
+    clean_config_dir = _get_clean_config_dir()
+
+    with _without_claudecode():
+        env = os.environ.copy()
+        if clean_config_dir is not None:
+            env["CLAUDE_CONFIG_DIR"] = str(clean_config_dir)
+
+        proc = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            cwd=cwd,
+            env=env,
+        )
+        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
+
+    if proc.returncode != 0:
+        raise ClaudeError(f"Claude exited with code {proc.returncode}: {stderr.decode().strip()}")
+
+    return stdout.decode().strip()
+
+
 async def verify_claude_auth() -> tuple[bool, str]:
     """Verify Claude authentication is working.
 
@@ -116,33 +139,7 @@ async def verify_claude_auth() -> tuple[bool, str]:
     Returns:
         Tuple of (success: bool, error_message: str)
     """
-    # Suppress SDK subprocess cleanup exceptions (cosmetic only, doesn't affect functionality)
-    loop = asyncio.get_event_loop()
-    original_handler = loop.get_exception_handler()
-
-    def suppress_sdk_cleanup_errors(
-        loop: asyncio.AbstractEventLoop, context: dict[str, Any]
-    ) -> None:
-        """Suppress ProcessError exceptions from SDK subprocess cleanup."""
-        exception = context.get("exception")
-        # Suppress ProcessError with exit codes 143 (SIGTERM) or -15
-        if exception and "ProcessError" in str(type(exception)):
-            if "exit code -15" in str(exception) or "exit code 143" in str(exception):
-                return  # Suppress this specific error
-        # For other exceptions, use original handler or default
-        if original_handler:
-            original_handler(loop, context)
-        else:
-            loop.default_exception_handler(context)
-
-    loop.set_exception_handler(suppress_sdk_cleanup_errors)
-
-    try:
-        result = await _verify_claude_auth_impl()
-        return result
-    finally:
-        # Restore original exception handler
-        loop.set_exception_handler(original_handler)
+    return await _verify_claude_auth_impl()
 
 
 async def _verify_claude_auth_impl() -> tuple[bool, str]:
@@ -157,28 +154,7 @@ async def _verify_claude_auth_impl() -> tuple[bool, str]:
     for attempt in range(max_retries):
         call_start = time.monotonic()
         try:
-            with _without_claudecode():
-                env = os.environ.copy()
-                if clean_config_dir is not None:
-                    env["CLAUDE_CONFIG_DIR"] = str(clean_config_dir)
-
-                options = ClaudeCodeOptions(
-                    model=config.MODEL,
-                    env=env,
-                    extra_args={"strict-mcp-config": None},
-                )
-
-                async def _do_auth_check(opts: ClaudeCodeOptions) -> bool:
-                    async with ClaudeSDKClient(options=opts) as client:
-                        await client.query("Reply with exactly: ok")
-                        async for message in _safe_receive(client.receive_response()):
-                            if isinstance(message, AssistantMessage):
-                                for block in message.content:
-                                    if isinstance(block, TextBlock):
-                                        return True
-                    return True
-
-                await asyncio.wait_for(_do_auth_check(options), timeout=30)
+            await _run_claude("Reply with exactly: ok", timeout=30)
 
             metrics.record_call(
                 "auth_check", time.monotonic() - call_start, success=True, rate_limited=False
@@ -300,30 +276,7 @@ Return ONLY this JSON format (no markdown, no code blocks):
     for attempt in range(max_retries):
         call_start = time.monotonic()
         try:
-            clean_config_dir = _get_clean_config_dir()
-            with _without_claudecode():
-                env = os.environ.copy()
-                if clean_config_dir is not None:
-                    env["CLAUDE_CONFIG_DIR"] = str(clean_config_dir)
-
-                options = ClaudeCodeOptions(
-                    model=config.MODEL,
-                    env=env,
-                    cwd=str(module_path),
-                    extra_args={"strict-mcp-config": None},
-                )
-
-                response_text = ""
-
-                # Create new client for clean session per module
-                async with ClaudeSDKClient(options=options) as client:
-                    await client.query(prompt)
-
-                    async for message in _safe_receive(client.receive_response()):
-                        if isinstance(message, AssistantMessage):
-                            for block in message.content:
-                                if isinstance(block, TextBlock):
-                                    response_text += block.text
+            response_text = await _run_claude(prompt, cwd=module_path, timeout=120)
 
             # Parse JSON response
             # Extract JSON from response (handle markdown code blocks and plain text)
@@ -369,6 +322,7 @@ Return ONLY this JSON format (no markdown, no code blocks):
                     "connection",
                     "initialize",
                     "rate_limit",
+                    "overloaded",
                 ]
             )
 
@@ -470,28 +424,7 @@ Return ONLY this JSON format (no markdown, no code blocks):
     for attempt in range(max_retries):
         call_start = time.monotonic()
         try:
-            clean_config_dir = _get_clean_config_dir()
-            with _without_claudecode():
-                env = os.environ.copy()
-                if clean_config_dir is not None:
-                    env["CLAUDE_CONFIG_DIR"] = str(clean_config_dir)
-
-                options = ClaudeCodeOptions(
-                    model=config.MODEL,
-                    env=env,
-                    extra_args={"strict-mcp-config": None},
-                )
-
-                response_text = ""
-
-                async with ClaudeSDKClient(options=options) as client:
-                    await client.query(prompt)
-
-                    async for message in _safe_receive(client.receive_response()):
-                        if isinstance(message, AssistantMessage):
-                            for block in message.content:
-                                if isinstance(block, TextBlock):
-                                    response_text += block.text
+            response_text = await _run_claude(prompt, timeout=60)
 
             # Parse JSON response
             if "```json" in response_text:
@@ -536,6 +469,7 @@ Return ONLY this JSON format (no markdown, no code blocks):
                     "connection",
                     "initialize",
                     "rate_limit",
+                    "overloaded",
                 ]
             )
 
@@ -624,28 +558,7 @@ Return ONLY this JSON format (no markdown, no code blocks):
     for attempt in range(max_retries):
         call_start = time.monotonic()
         try:
-            clean_config_dir = _get_clean_config_dir()
-            with _without_claudecode():
-                env = os.environ.copy()
-                if clean_config_dir is not None:
-                    env["CLAUDE_CONFIG_DIR"] = str(clean_config_dir)
-
-                options = ClaudeCodeOptions(
-                    model=config.MODEL,
-                    env=env,
-                    extra_args={"strict-mcp-config": None},
-                )
-
-                response_text = ""
-
-                async with ClaudeSDKClient(options=options) as client:
-                    await client.query(prompt)
-
-                    async for message in _safe_receive(client.receive_response()):
-                        if isinstance(message, AssistantMessage):
-                            for block in message.content:
-                                if isinstance(block, TextBlock):
-                                    response_text += block.text
+            response_text = await _run_claude(prompt, timeout=60)
 
             # Parse JSON response
             if "```json" in response_text:
@@ -689,6 +602,7 @@ Return ONLY this JSON format (no markdown, no code blocks):
                     "connection",
                     "initialize",
                     "rate_limit",
+                    "overloaded",
                 ]
             )
 

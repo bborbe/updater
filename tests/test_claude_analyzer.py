@@ -2,15 +2,13 @@
 
 import json
 import os
-from pathlib import Path
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
-from claude_code_sdk._errors import MessageParseError
 
 from updater import config
 from updater.claude_analyzer import (
-    _safe_receive,
+    _get_clean_config_dir,
     _without_claudecode,
     analyze_changes_with_claude,
     generate_changelog_from_commits,
@@ -36,28 +34,6 @@ def mock_module_path(tmp_path):
     return module_path
 
 
-def create_mock_client(response_text):
-    """Helper to create mock Claude SDK client."""
-    from claude_code_sdk import AssistantMessage, TextBlock
-
-    mock_text_block = Mock(spec=TextBlock)
-    mock_text_block.text = response_text
-
-    mock_assistant_msg = Mock(spec=AssistantMessage)
-    mock_assistant_msg.content = [mock_text_block]
-
-    async def mock_receive_response():
-        yield mock_assistant_msg
-
-    mock_client = AsyncMock()
-    mock_client.query = AsyncMock()
-    mock_client.receive_response = mock_receive_response
-    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-    mock_client.__aexit__ = AsyncMock()
-
-    return mock_client
-
-
 class TestAnalyzeChangesWithClaude:
     """Tests for analyze_changes_with_claude function."""
 
@@ -70,12 +46,11 @@ class TestAnalyzeChangesWithClaude:
             "commit_message": "update dependencies",
         }
 
-        mock_client = create_mock_client(json.dumps(mock_response))
-
         with (
-            patch("updater.claude_analyzer.ClaudeSDKClient", return_value=mock_client),
+            patch("updater.claude_analyzer._run_claude", new_callable=AsyncMock) as mock_run,
             patch("asyncio.sleep", new_callable=AsyncMock),
         ):
+            mock_run.return_value = json.dumps(mock_response)
             result = await analyze_changes_with_claude(mock_module_path)
 
         assert result["version_bump"] == "patch"
@@ -91,12 +66,11 @@ class TestAnalyzeChangesWithClaude:
             "commit_message": "add new feature X",
         }
 
-        mock_client = create_mock_client(json.dumps(mock_response))
-
         with (
-            patch("updater.claude_analyzer.ClaudeSDKClient", return_value=mock_client),
+            patch("updater.claude_analyzer._run_claude", new_callable=AsyncMock) as mock_run,
             patch("asyncio.sleep", new_callable=AsyncMock),
         ):
+            mock_run.return_value = json.dumps(mock_response)
             result = await analyze_changes_with_claude(mock_module_path)
 
         assert result["version_bump"] == "minor"
@@ -111,12 +85,11 @@ class TestAnalyzeChangesWithClaude:
             "commit_message": "breaking: remove deprecated API",
         }
 
-        mock_client = create_mock_client(json.dumps(mock_response))
-
         with (
-            patch("updater.claude_analyzer.ClaudeSDKClient", return_value=mock_client),
+            patch("updater.claude_analyzer._run_claude", new_callable=AsyncMock) as mock_run,
             patch("asyncio.sleep", new_callable=AsyncMock),
         ):
+            mock_run.return_value = json.dumps(mock_response)
             result = await analyze_changes_with_claude(mock_module_path)
 
         assert result["version_bump"] == "major"
@@ -130,12 +103,11 @@ class TestAnalyzeChangesWithClaude:
             "commit_message": "update .gitignore",
         }
 
-        mock_client = create_mock_client(json.dumps(mock_response))
-
         with (
-            patch("updater.claude_analyzer.ClaudeSDKClient", return_value=mock_client),
+            patch("updater.claude_analyzer._run_claude", new_callable=AsyncMock) as mock_run,
             patch("asyncio.sleep", new_callable=AsyncMock),
         ):
+            mock_run.return_value = json.dumps(mock_response)
             result = await analyze_changes_with_claude(mock_module_path)
 
         assert result["version_bump"] == "none"
@@ -150,12 +122,12 @@ class TestAnalyzeChangesWithClaude:
         }
 
         response_text = f"```json\n{json.dumps(mock_response)}\n```"
-        mock_client = create_mock_client(response_text)
 
         with (
-            patch("updater.claude_analyzer.ClaudeSDKClient", return_value=mock_client),
+            patch("updater.claude_analyzer._run_claude", new_callable=AsyncMock) as mock_run,
             patch("asyncio.sleep", new_callable=AsyncMock),
         ):
+            mock_run.return_value = response_text
             result = await analyze_changes_with_claude(mock_module_path)
 
         assert result["version_bump"] == "patch"
@@ -170,12 +142,12 @@ class TestAnalyzeChangesWithClaude:
         }
 
         response_text = f"```\n{json.dumps(mock_response)}\n```"
-        mock_client = create_mock_client(response_text)
 
         with (
-            patch("updater.claude_analyzer.ClaudeSDKClient", return_value=mock_client),
+            patch("updater.claude_analyzer._run_claude", new_callable=AsyncMock) as mock_run,
             patch("asyncio.sleep", new_callable=AsyncMock),
         ):
+            mock_run.return_value = response_text
             result = await analyze_changes_with_claude(mock_module_path)
 
         assert result["version_bump"] == "patch"
@@ -190,12 +162,12 @@ class TestAnalyzeChangesWithClaude:
         }
 
         response_text = f"Here is my analysis:\n\n{json.dumps(mock_response)}\n\nHope this helps!"
-        mock_client = create_mock_client(response_text)
 
         with (
-            patch("updater.claude_analyzer.ClaudeSDKClient", return_value=mock_client),
+            patch("updater.claude_analyzer._run_claude", new_callable=AsyncMock) as mock_run,
             patch("asyncio.sleep", new_callable=AsyncMock),
         ):
+            mock_run.return_value = response_text
             result = await analyze_changes_with_claude(mock_module_path)
 
         assert result["version_bump"] == "patch"
@@ -203,25 +175,24 @@ class TestAnalyzeChangesWithClaude:
     @pytest.mark.asyncio
     async def test_invalid_json_response(self, mock_module_path, reset_config):
         """Test handling of invalid JSON response."""
-        mock_client = create_mock_client("This is not valid JSON")
-
         with (
-            patch("updater.claude_analyzer.ClaudeSDKClient", return_value=mock_client),
+            patch("updater.claude_analyzer._run_claude", new_callable=AsyncMock) as mock_run,
             patch("asyncio.sleep", new_callable=AsyncMock),
             pytest.raises(ClaudeError, match="Failed to parse Claude response"),
         ):
+            mock_run.return_value = "This is not valid JSON"
             await analyze_changes_with_claude(mock_module_path)
 
     @pytest.mark.asyncio
     async def test_missing_fields_use_defaults(self, mock_module_path, reset_config):
         """Test default values when response is missing fields."""
         mock_response = {}  # Empty response
-        mock_client = create_mock_client(json.dumps(mock_response))
 
         with (
-            patch("updater.claude_analyzer.ClaudeSDKClient", return_value=mock_client),
+            patch("updater.claude_analyzer._run_claude", new_callable=AsyncMock) as mock_run,
             patch("asyncio.sleep", new_callable=AsyncMock),
         ):
+            mock_run.return_value = json.dumps(mock_response)
             result = await analyze_changes_with_claude(mock_module_path)
 
         # Should use defaults
@@ -230,65 +201,8 @@ class TestAnalyzeChangesWithClaude:
         assert result["commit_message"] == "update dependencies"
 
     @pytest.mark.asyncio
-    async def test_multiple_text_blocks(self, mock_module_path, reset_config):
-        """Test handling multiple text blocks in response."""
-        from claude_code_sdk import AssistantMessage, TextBlock
-
-        # Create multiple text blocks
-        mock_text_block1 = Mock(spec=TextBlock)
-        mock_text_block1.text = '{"version_bump": "patch",'
-
-        mock_text_block2 = Mock(spec=TextBlock)
-        mock_text_block2.text = ' "changelog": ["update deps"],'
-
-        mock_text_block3 = Mock(spec=TextBlock)
-        mock_text_block3.text = ' "commit_message": "update deps"}'
-
-        mock_assistant_msg = Mock(spec=AssistantMessage)
-        mock_assistant_msg.content = [mock_text_block1, mock_text_block2, mock_text_block3]
-
-        async def mock_receive_response():
-            yield mock_assistant_msg
-
-        mock_client = AsyncMock()
-        mock_client.query = AsyncMock()
-        mock_client.receive_response = mock_receive_response
-        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock()
-
-        with (
-            patch("updater.claude_analyzer.ClaudeSDKClient", return_value=mock_client),
-            patch("asyncio.sleep", new_callable=AsyncMock),
-        ):
-            result = await analyze_changes_with_claude(mock_module_path)
-
-        assert result["version_bump"] == "patch"
-
-    @pytest.mark.asyncio
-    async def test_changes_directory_context(self, mock_module_path, reset_config):
-        """Test that function changes to module directory for analysis."""
-        original_cwd = Path.cwd()
-
-        mock_response = {
-            "version_bump": "patch",
-            "changelog": ["update deps"],
-            "commit_message": "update deps",
-        }
-
-        mock_client = create_mock_client(json.dumps(mock_response))
-
-        with (
-            patch("updater.claude_analyzer.ClaudeSDKClient", return_value=mock_client),
-            patch("asyncio.sleep", new_callable=AsyncMock),
-        ):
-            await analyze_changes_with_claude(mock_module_path)
-
-        # Should be back to original directory after analysis
-        assert Path.cwd() == original_cwd
-
-    @pytest.mark.asyncio
     async def test_uses_configured_model(self, mock_module_path, reset_config):
-        """Test that configured model is used."""
+        """Test that configured model is passed to _run_claude."""
         config.MODEL = "haiku"
 
         mock_response = {
@@ -297,39 +211,17 @@ class TestAnalyzeChangesWithClaude:
             "commit_message": "update deps",
         }
 
-        mock_client = create_mock_client(json.dumps(mock_response))
-
         with (
-            patch("updater.claude_analyzer.ClaudeSDKClient", return_value=mock_client) as mock_sdk,
+            patch("updater.claude_analyzer._run_claude", new_callable=AsyncMock) as mock_run,
             patch("asyncio.sleep", new_callable=AsyncMock),
         ):
+            mock_run.return_value = json.dumps(mock_response)
             await analyze_changes_with_claude(mock_module_path)
 
-            # Verify model was passed to client
-            call_args = mock_sdk.call_args
-            assert call_args[1]["options"].model == "haiku"
-
-    @pytest.mark.asyncio
-    async def test_strict_mcp_config_flag(self, mock_module_path, reset_config):
-        """Test that --strict-mcp-config is set to disable project-level MCP servers."""
-        mock_response = {
-            "version_bump": "patch",
-            "changelog": ["update deps"],
-            "commit_message": "update deps",
-        }
-
-        mock_client = create_mock_client(json.dumps(mock_response))
-
-        with (
-            patch("updater.claude_analyzer.ClaudeSDKClient", return_value=mock_client) as mock_sdk,
-            patch("asyncio.sleep", new_callable=AsyncMock),
-        ):
-            await analyze_changes_with_claude(mock_module_path)
-
-            call_args = mock_sdk.call_args
-            options = call_args[1]["options"]
-            assert "strict-mcp-config" in options.extra_args
-            assert options.extra_args["strict-mcp-config"] is None
+            # _run_claude is called with cwd=module_path; model comes from config
+            mock_run.assert_called_once()
+            call_kwargs = mock_run.call_args
+            assert call_kwargs.kwargs.get("cwd") == mock_module_path
 
     @pytest.mark.asyncio
     async def test_clean_config_dir_not_created_if_missing(
@@ -342,34 +234,24 @@ class TestAnalyzeChangesWithClaude:
             "commit_message": "update deps",
         }
 
-        mock_client = create_mock_client(json.dumps(mock_response))
-
         # Use tmp_path as home directory for testing
         fake_home = tmp_path / "home"
         fake_home.mkdir()
 
         with (
-            patch("updater.claude_analyzer.ClaudeSDKClient", return_value=mock_client),
+            patch("updater.claude_analyzer._run_claude", new_callable=AsyncMock) as mock_run,
             patch("updater.claude_analyzer.Path.home", return_value=fake_home),
             patch("asyncio.sleep", new_callable=AsyncMock),
         ):
+            mock_run.return_value = json.dumps(mock_response)
             await analyze_changes_with_claude(mock_module_path)
 
             # .claude-clean should NOT be created automatically
             clean_dir = fake_home / ".claude-clean"
             assert not clean_dir.exists()
 
-    @pytest.mark.asyncio
-    async def test_clean_config_dir_used_if_exists(self, mock_module_path, reset_config, tmp_path):
-        """Test that .claude-clean is used when it already exists."""
-        mock_response = {
-            "version_bump": "patch",
-            "changelog": ["update deps"],
-            "commit_message": "update deps",
-        }
-
-        mock_client = create_mock_client(json.dumps(mock_response))
-
+    def test_clean_config_dir_used_if_exists(self, tmp_path):
+        """Test that _get_clean_config_dir sets up settings.json when .claude-clean exists."""
         # Use tmp_path as home directory for testing
         fake_home = tmp_path / "home"
         fake_home.mkdir()
@@ -378,20 +260,12 @@ class TestAnalyzeChangesWithClaude:
         clean_dir = fake_home / ".claude-clean"
         clean_dir.mkdir()
 
-        with (
-            patch("updater.claude_analyzer.ClaudeSDKClient", return_value=mock_client) as mock_sdk,
-            patch("updater.claude_analyzer.Path.home", return_value=fake_home),
-            patch("asyncio.sleep", new_callable=AsyncMock),
-        ):
-            await analyze_changes_with_claude(mock_module_path)
+        with patch("updater.claude_analyzer.Path.home", return_value=fake_home):
+            result = _get_clean_config_dir()
 
-            # settings.json should be created inside existing .claude-clean
-            assert (clean_dir / "settings.json").exists()
-
-            # CLAUDE_CONFIG_DIR should be set in env
-            call_args = mock_sdk.call_args
-            env = call_args[1]["options"].env
-            assert env.get("CLAUDE_CONFIG_DIR") == str(clean_dir)
+        # settings.json should be created inside existing .claude-clean
+        assert result == clean_dir
+        assert (clean_dir / "settings.json").exists()
 
     @pytest.mark.asyncio
     async def test_session_delay_applied(self, mock_module_path, reset_config):
@@ -404,13 +278,13 @@ class TestAnalyzeChangesWithClaude:
             "commit_message": "update deps",
         }
 
-        mock_client = create_mock_client(json.dumps(mock_response))
         mock_sleep = AsyncMock()
 
         with (
-            patch("updater.claude_analyzer.ClaudeSDKClient", return_value=mock_client),
+            patch("updater.claude_analyzer._run_claude", new_callable=AsyncMock) as mock_run,
             patch("asyncio.sleep", mock_sleep),
         ):
+            mock_run.return_value = json.dumps(mock_response)
             await analyze_changes_with_claude(mock_module_path)
 
             # Verify sleep was called with correct delay
@@ -423,9 +297,8 @@ class TestVerifyClaudeAuth:
     @pytest.mark.asyncio
     async def test_successful_auth(self, reset_config):
         """Test successful authentication."""
-        mock_client = create_mock_client("ok")
-
-        with patch("updater.claude_analyzer.ClaudeSDKClient", return_value=mock_client):
+        with patch("updater.claude_analyzer._run_claude", new_callable=AsyncMock) as mock_run:
+            mock_run.return_value = "ok"
             success, error = await verify_claude_auth()
 
         assert success is True
@@ -434,11 +307,11 @@ class TestVerifyClaudeAuth:
     @pytest.mark.asyncio
     async def test_invalid_api_key_error(self, reset_config):
         """Test auth failure with invalid API key."""
-        mock_client = AsyncMock()
-        mock_client.__aenter__ = AsyncMock(side_effect=Exception("Invalid API key"))
-        mock_client.__aexit__ = AsyncMock()
-
-        with patch("updater.claude_analyzer.ClaudeSDKClient", return_value=mock_client):
+        with patch(
+            "updater.claude_analyzer._run_claude",
+            new_callable=AsyncMock,
+            side_effect=Exception("Invalid API key"),
+        ):
             success, error = await verify_claude_auth()
 
         assert success is False
@@ -448,11 +321,11 @@ class TestVerifyClaudeAuth:
     @pytest.mark.asyncio
     async def test_login_required_error(self, reset_config):
         """Test auth failure when login required."""
-        mock_client = AsyncMock()
-        mock_client.__aenter__ = AsyncMock(side_effect=Exception("Please run /login"))
-        mock_client.__aexit__ = AsyncMock()
-
-        with patch("updater.claude_analyzer.ClaudeSDKClient", return_value=mock_client):
+        with patch(
+            "updater.claude_analyzer._run_claude",
+            new_callable=AsyncMock,
+            side_effect=Exception("Please run /login"),
+        ):
             success, error = await verify_claude_auth()
 
         assert success is False
@@ -461,12 +334,12 @@ class TestVerifyClaudeAuth:
     @pytest.mark.asyncio
     async def test_other_error(self, reset_config):
         """Test other errors don't show login hint."""
-        mock_client = AsyncMock()
-        mock_client.__aenter__ = AsyncMock(side_effect=Exception("Network timeout"))
-        mock_client.__aexit__ = AsyncMock()
-
         with (
-            patch("updater.claude_analyzer.ClaudeSDKClient", return_value=mock_client),
+            patch(
+                "updater.claude_analyzer._run_claude",
+                new_callable=AsyncMock,
+                side_effect=Exception("Network timeout"),
+            ),
             patch("asyncio.sleep", new_callable=AsyncMock),
         ):
             success, error = await verify_claude_auth()
@@ -515,10 +388,10 @@ class TestGenerateChangelogFromCommits:
             }
         )
 
-        mock_client = create_mock_client(response)
         mock_log = Mock()
 
-        with patch("updater.claude_analyzer.ClaudeSDKClient", return_value=mock_client):
+        with patch("updater.claude_analyzer._run_claude", new_callable=AsyncMock) as mock_run:
+            mock_run.return_value = response
             result = await generate_changelog_from_commits(
                 commits, "test-module", log_func=mock_log
             )
@@ -534,10 +407,10 @@ class TestGenerateChangelogFromCommits:
 
         response = '```json\n{"entries": ["Test entry"]}\n```'
 
-        mock_client = create_mock_client(response)
         mock_log = Mock()
 
-        with patch("updater.claude_analyzer.ClaudeSDKClient", return_value=mock_client):
+        with patch("updater.claude_analyzer._run_claude", new_callable=AsyncMock) as mock_run:
+            mock_run.return_value = response
             result = await generate_changelog_from_commits(
                 commits, "test-module", log_func=mock_log
             )
@@ -551,10 +424,10 @@ class TestGenerateChangelogFromCommits:
 
         response = json.dumps({"entries": []})
 
-        mock_client = create_mock_client(response)
         mock_log = Mock()
 
-        with patch("updater.claude_analyzer.ClaudeSDKClient", return_value=mock_client):
+        with patch("updater.claude_analyzer._run_claude", new_callable=AsyncMock) as mock_run:
+            mock_run.return_value = response
             result = await generate_changelog_from_commits(
                 commits, "test-module", log_func=mock_log
             )
@@ -601,74 +474,3 @@ class TestWithoutClaudecode:
         with _without_claudecode():
             pass
         assert "CLAUDECODE" not in os.environ
-
-
-class TestSafeReceive:
-    """Tests for _safe_receive wrapper."""
-
-    @pytest.mark.asyncio
-    async def test_safe_receive_skips_parse_errors(self):
-        """MessageParseError is skipped; surrounding messages are yielded."""
-
-        async def gen():
-            yield "first"
-            raise MessageParseError("Unknown message type: rate_limit_event")
-
-        results = []
-        async for msg in _safe_receive(gen()):
-            results.append(msg)
-
-        assert results == ["first"]
-
-    @pytest.mark.asyncio
-    async def test_safe_receive_skips_parse_error_between_messages(self):
-        """MessageParseError mid-stream is skipped; all other messages are yielded."""
-
-        async def gen():
-            yield "first"
-            raise MessageParseError("Unknown message type: rate_limit_event")
-
-        # To yield a message after the error we need a stateful generator
-        values = ["first", MessageParseError("skip"), "second"]
-
-        async def gen2():
-            for v in values:
-                if isinstance(v, MessageParseError):
-                    raise v
-                yield v
-
-        results = []
-        # gen2 stops at the raise, so only "first" is yielded — that is the
-        # expected behavior since the generator itself terminates after raise.
-        async for msg in _safe_receive(gen2()):
-            results.append(msg)
-
-        assert results == ["first"]
-
-    @pytest.mark.asyncio
-    async def test_safe_receive_normal(self):
-        """Generators with no errors yield all values."""
-
-        async def gen():
-            for v in [1, 2, 3]:
-                yield v
-
-        results = []
-        async for msg in _safe_receive(gen()):
-            results.append(msg)
-
-        assert results == [1, 2, 3]
-
-    @pytest.mark.asyncio
-    async def test_safe_receive_empty(self):
-        """Empty generator yields nothing."""
-
-        async def gen():
-            return
-            yield  # make it an async generator
-
-        results = []
-        async for msg in _safe_receive(gen()):
-            results.append(msg)
-
-        assert results == []

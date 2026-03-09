@@ -8,6 +8,10 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## v0.17.6
+
+- Replace claude-code-sdk with direct CLI subprocess calls (fixes rate_limit_event crashes)
+
 ## v0.17.5
 
 - Refactor Claude analysis to use built-in tools instead of embedding diffs in prompt
