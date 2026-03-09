@@ -3,24 +3,22 @@ __pycache__/
 *.py[cod]
 *$py.class
 *.so
+*.egg
+*.egg-info/
+.eggs/
 .Python
+.installed.cfg
 build/
 develop-eggs/
 dist/
 downloads/
 eggs/
-.eggs/
 lib/
 lib64/
 parts/
 sdist/
 var/
 wheels/
-*.egg-info/
-dependency_updater.egg-info/
-.installed.cfg
-*.egg
-*.old
 
 # Virtual environments
 .venv/
@@ -28,26 +26,26 @@ venv/
 ENV/
 env/
 
-# IDEs
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
+# Testing
+.coverage
 
 # uv
 .uv/
 
+# IDEs
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
 # OS
 .DS_Store
-
-# MCP
-.mcp.json
-/.coverage
 
 # Claude Code
 /.claude/
 /.mcp-*
+/.mcp.json
 /.update-logs/
 /CLAUDE.md
 
