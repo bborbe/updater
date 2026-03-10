@@ -447,12 +447,8 @@ class TestVerifyClaudeAuth:
     async def test_auth_times_out_after_30_seconds(self, reset_config):
         """Test that asyncio.TimeoutError from wait_for is treated as retryable and exhausts retries."""
 
-        async def mock_wait_for(coro, *, timeout):
-            coro.close()  # Prevent unawaited-coroutine warning
-            raise TimeoutError()
-
         with (
-            patch("asyncio.wait_for", side_effect=mock_wait_for),
+            patch("updater.claude_analyzer._run_claude", side_effect=TimeoutError()),
             patch("asyncio.sleep", new_callable=AsyncMock),
         ):
             success, error = await verify_claude_auth()
