@@ -36,6 +36,7 @@ from .go_updater import fix_osv_vulnerabilities, update_go_dependencies
 from .go_updater import run_precommit as run_go_precommit
 from .gomod_excludes import apply_gomod_excludes_and_replaces
 from .log_manager import log_message, run_command
+from .module_config import ModuleConfig, is_disabled, load_module_config
 from .prompts import prompt_yes_no
 from .python_updater import run_precommit as run_python_precommit
 from .python_updater import update_python_dependencies
@@ -92,6 +93,12 @@ class GoVersionUpdateStep(Step):
     """Update Go/Alpine versions in go.mod, Dockerfile, CI configs."""
 
     async def run(self, module_path: Path, context: dict[str, Any]) -> StepResult:
+        module_config: ModuleConfig = context.get("module_config", ModuleConfig())
+        if is_disabled(module_config, "golang-version"):
+            log_message(
+                "  → Skipping Go/Alpine version update (disabled by config)", to_console=True
+            )
+            return StepResult(StepStatus.SKIP)
         updates = update_versions(module_path, log_func=log_message)
         context.setdefault("updates_made", False)
         context["updates_made"] = context["updates_made"] or updates
@@ -113,6 +120,10 @@ class GoDepUpdateStep(Step):
     """Update Go dependencies via go get -u."""
 
     async def run(self, module_path: Path, context: dict[str, Any]) -> StepResult:
+        module_config: ModuleConfig = context.get("module_config", ModuleConfig())
+        if is_disabled(module_config, "go-dependencies"):
+            log_message("  → Skipping Go dependency update (disabled by config)", to_console=True)
+            return StepResult(StepStatus.SKIP)
         updates = update_go_dependencies(module_path, log_func=log_message)
         context.setdefault("updates_made", False)
         context["updates_made"] = context["updates_made"] or updates
@@ -142,6 +153,10 @@ class PythonVersionUpdateStep(Step):
     """Update Python version in .python-version, pyproject.toml, Dockerfile."""
 
     async def run(self, module_path: Path, context: dict[str, Any]) -> StepResult:
+        module_config: ModuleConfig = context.get("module_config", ModuleConfig())
+        if is_disabled(module_config, "python-version"):
+            log_message("  → Skipping Python version update (disabled by config)", to_console=True)
+            return StepResult(StepStatus.SKIP)
         updates = update_python_versions(module_path, log_func=log_message)
         context.setdefault("updates_made", False)
         context["updates_made"] = context["updates_made"] or updates
@@ -152,6 +167,12 @@ class PythonDepUpdateStep(Step):
     """Update Python dependencies via uv sync --upgrade."""
 
     async def run(self, module_path: Path, context: dict[str, Any]) -> StepResult:
+        module_config: ModuleConfig = context.get("module_config", ModuleConfig())
+        if is_disabled(module_config, "python-version"):
+            log_message(
+                "  → Skipping Python dependency update (disabled by config)", to_console=True
+            )
+            return StepResult(StepStatus.SKIP)
         updates = update_python_dependencies(module_path, log_func=log_message)
         context.setdefault("updates_made", False)
         context["updates_made"] = context["updates_made"] or updates
@@ -265,9 +286,19 @@ class ChangelogStep(Step):
     async def run(self, module_path: Path, context: dict[str, Any]) -> StepResult:
         from .cli import print_commit_summary
 
-        # Analyze changes with Claude
-        analysis = await analyze_changes_with_claude(module_path, log_func=log_message)
-        context["analysis"] = analysis
+        module_config: ModuleConfig = context.get("module_config", ModuleConfig())
+        if is_disabled(module_config, "llm-analysis"):
+            log_message("  → Skipping LLM analysis (disabled by config)", to_console=True)
+            context["analysis"] = {
+                "version_bump": "patch",
+                "changelog": ["update dependencies"],
+                "commit_message": "update dependencies",
+            }
+            analysis = context["analysis"]
+        else:
+            # Analyze changes with Claude
+            analysis = await analyze_changes_with_claude(module_path, log_func=log_message)
+            context["analysis"] = analysis
 
         changelog_path = module_path / "CHANGELOG.md"
 
@@ -649,6 +680,14 @@ class Pipeline:
         """
         if context is None:
             context = {}
+
+        module_config = load_module_config(module_path)
+        context["module_config"] = module_config
+        if module_config.disable:
+            log_message(
+                f"  → Config: disable=[{', '.join(module_config.disable)}]",
+                to_console=True,
+            )
 
         last_result = StepResult(StepStatus.SUCCESS)
         for step in self.steps:

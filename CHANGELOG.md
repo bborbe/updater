@@ -8,6 +8,10 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## v0.17.20
+
+- Add per-project `.updater.yaml` config file support so projects can disable specific update phases (`python-version`, `golang-version`, `alpine-version`, `go-dependencies`, `llm-analysis`) via a `disable` list; invalid config produces warnings and falls back to defaults without blocking updates
+
 ## v0.17.19
 
 - Fix intermittent stuck prompt after Claude CLI timeout by setting `stdin=DEVNULL` on subprocess

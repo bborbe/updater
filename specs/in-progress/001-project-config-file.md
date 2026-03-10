@@ -1,6 +1,7 @@
 ---
-status: approved
+status: verifying
 approved: "2026-03-10T08:56:59Z"
+verifying: "2026-03-10T09:09:57Z"
 ---
 
 ## Summary
