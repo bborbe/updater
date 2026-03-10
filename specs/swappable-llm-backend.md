@@ -4,41 +4,141 @@ status: draft
 
 ## Summary
 
-- The updater currently hardcodes Claude Code SDK as its only LLM backend for analyzing changes and generating changelogs
-- Rate limit errors and SDK bugs (e.g. unknown message types) cause failures that require full restarts
-- Introduce a swappable backend so users can choose between Claude Code SDK and Gemini CLI
-- A `--backend` flag selects the backend; default remains Claude
+- The updater currently hardcodes Claude CLI as its only LLM backend for analyzing changes and generating changelogs
+- Rate limit errors and timeouts cause failures that require manual retry
+- Add Gemini CLI and Codex CLI as alternative backends
+- The existing `--model` flag gains a `backend:model` format to select backend and model in one argument
 - Backend selection affects only the LLM calls, not the update pipeline logic
 
 ## Problem
 
-The updater depends entirely on Claude Code SDK for change analysis, version bump decisions, and changelog generation. When Claude hits rate limits or the SDK encounters unknown message types (e.g. `rate_limit_event`), the entire update process fails. There is no fallback. Users must restart and hope the issue resolved. Having an alternative backend (Gemini CLI) provides resilience and lets users choose based on cost, speed, or availability.
+The updater depends entirely on Claude CLI for change analysis, version bump decisions, and changelog generation. When Claude hits rate limits or times out, the entire update process stalls. There is no fallback. Having alternative backends (Gemini CLI, Codex CLI) provides resilience and lets users choose based on cost, speed, or availability.
 
 ## Goal
 
-After this work, the updater supports multiple LLM backends behind a common interface. Users select a backend via `--backend claude|gemini`. The default remains Claude with identical behavior to today. A Gemini backend provides an alternative when Claude is unavailable or rate-limited.
+After this work, the updater supports multiple LLM backends behind a common interface. Users select a backend and model via `--model backend:model`. The default remains Claude with identical behavior to today. Gemini and Codex backends provide alternatives when Claude is unavailable or rate-limited.
 
 ## Non-goals
 
-- OpenAI or other backends (future work)
-- Gemini API (google-genai SDK) — CLI is simpler and sufficient
+- API-based backends (google-genai SDK, OpenAI SDK) — CLI tools are simpler and sufficient
 - Changing the prompts themselves (reuse existing prompt templates)
 - Parallel/fallback chains (use backend A, fall back to B)
+- Auto-detection of available backends
 
 ## Assumptions
 
-- Gemini CLI (`gemini`) accepts prompts via stdin and returns text to stdout
-- Gemini CLI has a stable interface for non-interactive prompt execution
-- Both LLMs can produce structured JSON when instructed to do so
+- All three CLIs accept prompts and return text to stdout in non-interactive mode
+- All three CLIs have a stable interface for non-interactive prompt execution
+- All three LLMs can produce structured JSON when instructed to do so
+
+## CLI Interface Mapping
+
+| Feature | Claude | Gemini | Codex |
+|---------|--------|--------|-------|
+| Binary | `claude` | `gemini` | `codex` |
+| Non-interactive | `--print -p <prompt>` | `-p <prompt>` | `exec <prompt>` |
+| Output format | `--output-format text` | `--output-format text` | `--json` (JSONL) or `-o <file>` |
+| Model flag | `--model <m>` | `-m <m>` | `-m <m>` |
+| Auto-approve tools | N/A (--print is non-agentic) | `--yolo` | `--full-auto` |
+| Working dir | `cwd=` parameter | `cwd=` parameter | `--cd <dir>` or `cwd=` |
+| Stdin | `DEVNULL` (required) | `DEVNULL` (required) | `DEVNULL` (required) |
+
+## `--model` Flag Format
+
+The `--model` flag uses a `backend:model` format to combine backend selection and model choice:
+
+```
+--model claude:sonnet      # Claude backend, sonnet model
+--model gemini:gemini-2.5-pro  # Gemini backend, specific model
+--model codex:o3           # Codex backend, o3 model
+--model gemini             # Gemini backend, default model
+--model claude             # Claude backend, default model (same as no flag)
+--model sonnet             # Claude backend, sonnet model (backward compat)
+```
+
+Parsing logic:
+
+```python
+def parse_model(value: str | None) -> tuple[str, str | None]:
+    """Parse --model value into (backend, model).
+
+    Returns:
+        (backend_name, model_or_none)
+    """
+    if value is None:
+        return ("claude", None)
+
+    known_backends = {"claude", "gemini", "codex"}
+    backend, _, model = value.partition(":")
+
+    if backend in known_backends:
+        return (backend, model or None)
+
+    # No colon or unknown prefix → assume Claude backend, entire value is model name
+    # e.g. "--model sonnet" → ("claude", "sonnet")
+    return ("claude", value)
+```
 
 ## Desired Behavior
 
-1. `update-go --backend gemini` uses Gemini CLI for all LLM analysis
-2. `update-go --backend claude` uses Claude Code SDK (current behavior, also the default)
-3. `update-go` without `--backend` defaults to `claude`
-4. Auth check is backend-specific: Claude checks OAuth, Gemini checks CLI availability
-5. Both backends produce identical JSON output format for the same prompts
-6. Rate limit and timeout retry logic is backend-specific (each backend recognizes its own error patterns)
+1. `update-all --model gemini` uses Gemini CLI with default model
+2. `update-all --model gemini:gemini-2.5-pro` uses Gemini CLI with specific model
+3. `update-all --model codex:o3` uses Codex CLI with o3
+4. `update-all --model claude:sonnet` uses Claude CLI with sonnet (also the default)
+5. `update-all --model sonnet` backward compatible — Claude backend, sonnet model
+6. `update-all` without `--model` defaults to Claude with default model
+7. Auth check is backend-specific: each backend verifies its own CLI availability and auth
+8. All backends produce identical JSON output format for the same prompts
+9. Rate limit and timeout retry logic is backend-specific (each backend recognizes its own error patterns)
+
+## Architecture
+
+### Backend Interface
+
+```python
+class LLMBackend(Protocol):
+    async def run(self, prompt: str, cwd: Path | None, timeout: int) -> str:
+        """Send prompt, return text response. Raise LLMError on failure."""
+        ...
+
+    async def verify_auth(self) -> tuple[bool, str]:
+        """Check backend is available and authenticated."""
+        ...
+
+    @property
+    def name(self) -> str: ...
+```
+
+### Backend Implementations
+
+Each backend is a thin wrapper around subprocess exec:
+
+- `ClaudeBackend` — wraps current `_run_claude()` logic
+  - `claude --print -p <prompt> --output-format text [--model <m>]`
+- `GeminiBackend` — `gemini -p <prompt> --output-format text --yolo [-m <m>]`
+- `CodexBackend` — `codex exec <prompt> --full-auto [-m <m>]`
+
+### Factory
+
+```python
+def create_backend(model_spec: str | None) -> LLMBackend:
+    backend, model = parse_model(model_spec)
+    match backend:
+        case "claude": return ClaudeBackend(model)
+        case "gemini": return GeminiBackend(model)
+        case "codex":  return CodexBackend(model)
+        case _: raise ValueError(f"Unknown backend: {backend}")
+```
+
+### Integration Point
+
+`claude_analyzer.py` becomes `llm_analyzer.py`. The module-level functions (`analyze_changes_with_claude`, `verify_claude_auth`, etc.) become backend-agnostic by accepting a backend instance:
+
+```python
+async def analyze_changes(backend: LLMBackend, module_path: Path, ...) -> dict:
+    response = await backend.run(prompt, cwd=module_path, timeout=120)
+    return _extract_json_from_response(response)
+```
 
 ## Constraints
 
@@ -46,38 +146,42 @@ After this work, the updater supports multiple LLM backends behind a common inte
 - Backend-specific code must not leak into the shared pipeline layer
 - Prompts (the text sent to the LLM) remain identical across backends
 - JSON response parsing remains identical across backends
-- `config.MODEL` continues to work (passed to selected backend)
+- `--model sonnet` (without colon) must remain backward compatible with current behavior
 - `--check-command` and all other existing flags unchanged
-- No new Python package dependencies may be added for the Gemini backend
+- No new Python package dependencies may be added
+- All subprocess calls must set `stdin=DEVNULL`
 
 ## Failure Modes
 
 | Trigger | Expected behavior | Recovery |
 |---------|-------------------|----------|
-| Gemini CLI not installed | Auth check fails with actionable install instructions | User installs CLI |
-| Gemini returns non-JSON | Same JSON parse error handling as Claude path | Retry with backoff |
-| Gemini rate limited | Retry with appropriate delays | Exponential backoff |
-| Gemini subprocess exceeds timeout | Process killed, error returned to caller | Caller retries or user aborts |
-| Invalid `--backend` value | Argparse error listing valid choices | User corrects flag |
-| `--model` incompatible with backend | LLM returns error, propagated with backend context | User corrects model |
+| CLI not installed | Auth check fails with install instructions | User installs CLI |
+| Backend returns non-JSON | Same JSON parse error handling for all backends | Retry with backoff |
+| Rate limited | Retry with backend-specific delays | Exponential backoff |
+| Subprocess exceeds timeout | Process killed, error returned | Caller retries or user skips |
+| Invalid backend in `--model` | Error listing valid backends (claude, gemini, codex) | User corrects flag |
+| Model incompatible with backend | LLM returns error, propagated with backend context | User corrects model |
 
 ## Security / Abuse Cases
 
-- `--model` and `--backend` are CLI arguments from the local user who already has shell access — no privilege escalation
-- Gemini CLI is invoked via subprocess; prompt content is passed via stdin/tempfile, not interpolated into shell commands — no command injection
+- `--model` is a CLI argument from the local user who already has shell access — no privilege escalation
+- All CLIs are invoked via subprocess; prompt content is passed as arguments, not interpolated into shell commands — no command injection
 - No network-facing surface; all invocations are local CLI tool calls
 - Subprocess timeout must be enforced to prevent hangs
+- `stdin=DEVNULL` on all subprocesses to prevent terminal corruption
 
 ## Acceptance Criteria
 
-- [ ] Running `update-go --backend gemini` completes change analysis without invoking Claude SDK
-- [ ] Running `update-go --backend claude` produces identical behavior to current (no `--backend` flag)
-- [ ] Running `update-go` without `--backend` defaults to Claude
-- [ ] Auth check fails with actionable error when selected backend is unavailable
-- [ ] Unit tests assert both backends parse a fixture response into the same output structure
+- [ ] `update-all --model gemini` completes change analysis using Gemini CLI
+- [ ] `update-all --model codex:o3` completes change analysis using Codex CLI
+- [ ] `update-all --model claude:sonnet` produces identical behavior to current `--model sonnet`
+- [ ] `update-all --model sonnet` backward compatible (Claude backend, sonnet model)
+- [ ] `update-all` without `--model` defaults to Claude with default model
+- [ ] Auth check fails with actionable error when selected backend CLI is unavailable
+- [ ] Unit tests assert all backends parse a fixture response into the same output structure
 - [ ] All existing tests pass without modification
-- [ ] New tests verify Gemini backend with mocked subprocess calls
-- [ ] New tests verify backend selection and default behavior
+- [ ] New tests verify Gemini and Codex backends with mocked subprocess calls
+- [ ] New tests verify `parse_model()` with all input variants
 
 ## Verification
 
@@ -87,4 +191,4 @@ make precommit
 
 ## Do-Nothing Option
 
-Keep Claude-only. When rate limited, wait and retry manually. Acceptable short-term, but limits resilience and locks into a single provider. The `rate_limit_event` SDK bug showed how fragile single-backend dependency is.
+Keep Claude-only. When rate limited, wait and retry manually. Acceptable short-term, but limits resilience and locks into a single provider.
