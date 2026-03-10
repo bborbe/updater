@@ -8,6 +8,10 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## v0.17.19
+
+- Fix intermittent stuck prompt after Claude CLI timeout by setting `stdin=DEVNULL` on subprocess
+
 ## v0.17.18
 
 - Add tests for `process_single_python_module()`, `process_release_module()`, `process_release_with_retry()`, docker project type in `process_module_with_retry()`, auth failure, `--skip-git-update`, git status error, multi-module summary, and explicit entry points (`main_go_async`, `main_go_only_async`, `main_go_with_deps_async`, `main_python_async`, `main_docker_async`, `main_release_async`) in `cli.py`, raising coverage from 39% to 94%
