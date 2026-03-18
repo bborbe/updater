@@ -57,20 +57,18 @@ class TestUpdateGoDependencies:
             # Third call: go get
             # Fourth call: check for more updates (none)
             # Fifth call: go mod tidy
-            # Sixth call: go mod vendor
             mock_run.side_effect = [
                 Mock(returncode=0, stdout=mock_stdout_check, stderr=""),  # list outdated
                 Mock(returncode=0, stdout=mock_stdout_detail, stderr=""),  # check module
                 Mock(returncode=0, stdout="", stderr=""),  # go get
                 Mock(returncode=0, stdout="", stderr=""),  # check again (no more updates)
                 Mock(returncode=0, stdout="", stderr=""),  # go mod tidy
-                Mock(returncode=0, stdout="", stderr=""),  # go mod vendor
             ]
 
             result = update_go_dependencies(mock_module_path)
 
         assert result is True
-        assert mock_run.call_count == 6
+        assert mock_run.call_count == 5
 
     def test_multiple_updates_single_iteration(self, mock_module_path, reset_config):
         """Test updating multiple dependencies in single iteration."""
@@ -90,7 +88,6 @@ class TestUpdateGoDependencies:
                 Mock(returncode=0, stdout="", stderr=""),
                 # Cleanup
                 Mock(returncode=0, stdout="", stderr=""),  # go mod tidy
-                Mock(returncode=0, stdout="", stderr=""),  # go mod vendor
             ]
 
             result = update_go_dependencies(mock_module_path)
@@ -113,7 +110,6 @@ class TestUpdateGoDependencies:
                 Mock(returncode=0, stdout="", stderr=""),
                 # Cleanup
                 Mock(returncode=0, stdout="", stderr=""),  # go mod tidy
-                Mock(returncode=0, stdout="", stderr=""),  # go mod vendor
             ]
 
             result = update_go_dependencies(mock_module_path)
@@ -137,14 +133,13 @@ class TestUpdateGoDependencies:
                 Mock(returncode=0, stdout="", stderr=""),  # go get
                 # Cleanup
                 Mock(returncode=0, stdout="", stderr=""),  # go mod tidy
-                Mock(returncode=0, stdout="", stderr=""),  # go mod vendor
             ]
 
             result = update_go_dependencies(mock_module_path)
 
         assert result is True
         # Should stop after max iterations, then run cleanup
-        assert mock_run.call_count == 8
+        assert mock_run.call_count == 7
 
     def test_module_with_no_update_available(self, mock_module_path, reset_config):
         """Test skipping module when no update is actually available."""
@@ -177,8 +172,8 @@ class TestUpdateGoDependencies:
         # Just verify it doesn't crash - actual logging checked by integration tests
         assert mock_run.call_count == 1
 
-    def test_go_mod_tidy_and_vendor_called(self, mock_module_path, reset_config):
-        """Test that go mod tidy and vendor are called after updates."""
+    def test_go_mod_tidy_called(self, mock_module_path, reset_config):
+        """Test that go mod tidy is called after updates."""
         with patch("updater.go_updater.run_command") as mock_run:
             mock_run.side_effect = [
                 Mock(returncode=0, stdout="github.com/foo/bar", stderr=""),
@@ -186,17 +181,16 @@ class TestUpdateGoDependencies:
                 Mock(returncode=0, stdout="", stderr=""),  # go get
                 Mock(returncode=0, stdout="", stderr=""),  # check again
                 Mock(returncode=0, stdout="", stderr=""),  # go mod tidy
-                Mock(returncode=0, stdout="", stderr=""),  # go mod vendor
             ]
 
             result = update_go_dependencies(mock_module_path)
 
         assert result is True
 
-        # Verify the last two calls were tidy and vendor
+        # Verify tidy was called
         calls = [str(call) for call in mock_run.call_args_list]
         assert any("go mod tidy" in str(call) for call in calls)
-        assert any("go mod vendor" in str(call) for call in calls)
+        assert not any("go mod vendor" in str(call) for call in calls)
 
     def test_command_failure_raises_error(self, mock_module_path, reset_config):
         """Test that command failures raise RuntimeError."""
@@ -413,12 +407,12 @@ class TestFixOsvVulnerabilities:
             result = fix_osv_vulnerabilities(tmp_path)
 
         assert result is True
-        # Should call: go get -u, go mod tidy, go mod vendor
-        assert mock_run.call_count == 3
+        # Should call: go get -u, go mod tidy
+        assert mock_run.call_count == 2
         calls = [str(c) for c in mock_run.call_args_list]
         assert any("go get -u github.com/docker/cli" in c for c in calls)
         assert any("go mod tidy" in c for c in calls)
-        assert any("go mod vendor" in c for c in calls)
+        assert not any("go mod vendor" in c for c in calls)
 
     def test_no_go_packages_in_output(self, tmp_path):
         makefile = tmp_path / "Makefile"

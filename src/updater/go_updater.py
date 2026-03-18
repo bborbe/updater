@@ -83,12 +83,9 @@ def update_go_dependencies(module_path: Path, log_func: Callable[..., None] = lo
         log_func("\n✓ No dependency updates needed", to_console=True)
         return False
 
-    # Run go mod tidy and vendor
+    # Run go mod tidy
     log_func("\n→ Running go mod tidy", to_console=config.VERBOSE_MODE)
     run_command("go mod tidy", cwd=module_path, quiet=True, log_func=log_func)
-
-    log_func("→ Running go mod vendor", to_console=config.VERBOSE_MODE)
-    run_command("go mod vendor", cwd=module_path, quiet=True, log_func=log_func)
 
     log_func("\n✓ Go dependencies updated successfully", to_console=True)
     return True
@@ -157,7 +154,6 @@ def fix_osv_vulnerabilities(module_path: Path, log_func: Callable[..., None] = l
         run_command(f"go get -u {pkg}", cwd=module_path, quiet=True, log_func=log_func)
 
     run_command("go mod tidy", cwd=module_path, quiet=True, log_func=log_func)
-    run_command("go mod vendor", cwd=module_path, quiet=True, log_func=log_func)
 
     log_func("✓ OSV vulnerabilities fixed", to_console=True)
     return True

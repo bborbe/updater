@@ -8,6 +8,10 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## v0.17.23
+
+- refactor: Remove `go mod vendor` calls from `update_go_dependencies` and `fix_osv_vulnerabilities`; vendor generation is handled by `make precommit` when needed
+
 ## v0.17.22
 
 - remove all remaining STANDARD_EXCLUDES (cloud.google.com/go, go-logr, go.yaml.in, golang.org/x/tools) — excludes break `go install`
