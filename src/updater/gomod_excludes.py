@@ -16,62 +16,26 @@ STANDARD_EXCLUDES = [
     "go.yaml.in/yaml/v3@v3.0.4",
     "golang.org/x/tools@v0.38.0",
     "golang.org/x/tools@v0.39.0",
-    "k8s.io/api@v0.34.0",
-    "k8s.io/api@v0.34.1",
-    "k8s.io/api@v0.34.2",
-    "k8s.io/api@v0.34.3",
-    "k8s.io/api@v0.34.4",
-    "k8s.io/api@v0.34.5",
-    "k8s.io/api@v0.35.0",
-    "k8s.io/api@v0.35.1",
-    "k8s.io/api@v0.35.2",
-    "k8s.io/apiextensions-apiserver@v0.34.0",
-    "k8s.io/apiextensions-apiserver@v0.34.1",
-    "k8s.io/apiextensions-apiserver@v0.34.2",
-    "k8s.io/apiextensions-apiserver@v0.34.3",
-    "k8s.io/apiextensions-apiserver@v0.34.4",
-    "k8s.io/apiextensions-apiserver@v0.34.5",
-    "k8s.io/apiextensions-apiserver@v0.35.0",
-    "k8s.io/apiextensions-apiserver@v0.35.1",
-    "k8s.io/apiextensions-apiserver@v0.35.2",
-    "k8s.io/apimachinery@v0.34.0",
-    "k8s.io/apimachinery@v0.34.1",
-    "k8s.io/apimachinery@v0.34.2",
-    "k8s.io/apimachinery@v0.34.3",
-    "k8s.io/apimachinery@v0.34.4",
-    "k8s.io/apimachinery@v0.34.5",
-    "k8s.io/apimachinery@v0.35.0",
-    "k8s.io/apimachinery@v0.35.1",
-    "k8s.io/apimachinery@v0.35.2",
-    "k8s.io/client-go@v0.34.0",
-    "k8s.io/client-go@v0.34.1",
-    "k8s.io/client-go@v0.34.2",
-    "k8s.io/client-go@v0.34.3",
-    "k8s.io/client-go@v0.34.4",
-    "k8s.io/client-go@v0.34.5",
-    "k8s.io/client-go@v0.35.0",
-    "k8s.io/client-go@v0.35.1",
-    "k8s.io/client-go@v0.35.2",
-    "k8s.io/code-generator@v0.34.0",
-    "k8s.io/code-generator@v0.34.1",
-    "k8s.io/code-generator@v0.34.2",
-    "k8s.io/code-generator@v0.34.3",
-    "k8s.io/code-generator@v0.34.4",
-    "k8s.io/code-generator@v0.34.5",
-    "k8s.io/code-generator@v0.35.0",
-    "k8s.io/code-generator@v0.35.1",
-    "k8s.io/code-generator@v0.35.2",
-    "sigs.k8s.io/structured-merge-diff/v6@v6.0.0",
-    "sigs.k8s.io/structured-merge-diff/v6@v6.1.0",
-    "sigs.k8s.io/structured-merge-diff/v6@v6.2.0",
-    "sigs.k8s.io/structured-merge-diff/v6@v6.3.0",
 ]
 
 # Standard replacements
 # Format: (old_module, "new_module version")
 # Note: go.mod stores as "new_module version" (space-separated)
-STANDARD_REPLACES = [
-    ("k8s.io/kube-openapi", "k8s.io/kube-openapi v0.0.0-20250701173324-9bd5c66d9911"),
+STANDARD_REPLACES: list[tuple[str, str]] = []
+
+# Exclude prefixes that should be REMOVED from projects (obsolete workarounds)
+OBSOLETE_EXCLUDES_PREFIXES = [
+    "k8s.io/api@",
+    "k8s.io/apiextensions-apiserver@",
+    "k8s.io/apimachinery@",
+    "k8s.io/client-go@",
+    "k8s.io/code-generator@",
+    "sigs.k8s.io/structured-merge-diff/v6@",
+]
+
+# Replace module names whose directives should be REMOVED from projects (obsolete workarounds)
+OBSOLETE_REPLACES = [
+    "k8s.io/kube-openapi",
 ]
 
 
@@ -222,7 +186,31 @@ def apply_gomod_excludes_and_replaces(
         )
         changes_made = True
 
+    # Remove obsolete excludes
+    for exclude in list(existing_excludes):
+        if any(exclude.startswith(prefix) for prefix in OBSOLETE_EXCLUDES_PREFIXES):
+            log_func(f"  → Removing obsolete exclude: {exclude}", to_console=True)
+            run_command(
+                f"go mod edit -dropexclude {exclude}",
+                cwd=module_path,
+                quiet=True,
+                log_func=log_func,
+            )
+            changes_made = True
+
+    # Remove obsolete replaces
+    for old_module in list(existing_replaces):
+        if old_module in OBSOLETE_REPLACES:
+            log_func(f"  → Removing obsolete replace: {old_module}", to_console=True)
+            run_command(
+                f"go mod edit -dropreplace {old_module}",
+                cwd=module_path,
+                quiet=True,
+                log_func=log_func,
+            )
+            changes_made = True
+
     if not changes_made:
-        log_func("  ✓ All excludes and replaces already present", to_console=True)
+        log_func("  ✓ All excludes and replaces up to date", to_console=True)
 
     return changes_made

@@ -156,60 +156,15 @@ def test_apply_excludes_to_empty_gomod(tmp_path, mocker):
 
 
 def test_apply_excludes_idempotent(tmp_path, mocker):
-    """Test that applying excludes twice doesn't duplicate them."""
+    """Test that applying excludes to an already up-to-date go.mod makes no changes."""
     gomod = tmp_path / "go.mod"
-    # Pre-populate with all standard excludes and replaces
+    # Pre-populate with all current standard excludes (no k8s, no kube-openapi)
     content = """module example.com/test
 
 go 1.23
 
 exclude (
     cloud.google.com/go v0.26.0
-    k8s.io/api v0.34.0
-    k8s.io/api v0.34.1
-    k8s.io/api v0.34.2
-    k8s.io/api v0.34.3
-    k8s.io/api v0.34.4
-    k8s.io/api v0.34.5
-    k8s.io/api v0.35.0
-    k8s.io/api v0.35.1
-    k8s.io/api v0.35.2
-    k8s.io/client-go v0.34.0
-    k8s.io/client-go v0.34.1
-    k8s.io/client-go v0.34.2
-    k8s.io/client-go v0.34.3
-    k8s.io/client-go v0.34.4
-    k8s.io/client-go v0.34.5
-    k8s.io/client-go v0.35.0
-    k8s.io/client-go v0.35.1
-    k8s.io/client-go v0.35.2
-    k8s.io/code-generator v0.34.0
-    k8s.io/code-generator v0.34.1
-    k8s.io/code-generator v0.34.2
-    k8s.io/code-generator v0.34.3
-    k8s.io/code-generator v0.34.4
-    k8s.io/code-generator v0.34.5
-    k8s.io/code-generator v0.35.0
-    k8s.io/code-generator v0.35.1
-    k8s.io/code-generator v0.35.2
-    k8s.io/apiextensions-apiserver v0.34.0
-    k8s.io/apiextensions-apiserver v0.34.1
-    k8s.io/apiextensions-apiserver v0.34.2
-    k8s.io/apiextensions-apiserver v0.34.3
-    k8s.io/apiextensions-apiserver v0.34.4
-    k8s.io/apiextensions-apiserver v0.34.5
-    k8s.io/apiextensions-apiserver v0.35.0
-    k8s.io/apiextensions-apiserver v0.35.1
-    k8s.io/apiextensions-apiserver v0.35.2
-    k8s.io/apimachinery v0.34.0
-    k8s.io/apimachinery v0.34.1
-    k8s.io/apimachinery v0.34.2
-    k8s.io/apimachinery v0.34.3
-    k8s.io/apimachinery v0.34.4
-    k8s.io/apimachinery v0.34.5
-    k8s.io/apimachinery v0.35.0
-    k8s.io/apimachinery v0.35.1
-    k8s.io/apimachinery v0.35.2
     github.com/go-logr/glogr v1.0.0-rc1
     github.com/go-logr/glogr v1.0.0
     github.com/go-logr/logr v1.0.0-rc1
@@ -218,13 +173,7 @@ exclude (
     go.yaml.in/yaml/v3 v3.0.4
     golang.org/x/tools v0.38.0
     golang.org/x/tools v0.39.0
-    sigs.k8s.io/structured-merge-diff/v6 v6.0.0
-    sigs.k8s.io/structured-merge-diff/v6 v6.1.0
-    sigs.k8s.io/structured-merge-diff/v6 v6.2.0
-    sigs.k8s.io/structured-merge-diff/v6 v6.3.0
 )
-
-replace k8s.io/kube-openapi => k8s.io/kube-openapi v0.0.0-20250701173324-9bd5c66d9911
 """
     gomod.write_text(content)
 
@@ -235,6 +184,39 @@ replace k8s.io/kube-openapi => k8s.io/kube-openapi v0.0.0-20250701173324-9bd5c66
 
     assert result is False  # No changes needed
     assert mock_run.call_count == 0  # No commands run
+
+
+def test_apply_excludes_removes_obsolete_k8s_entries(tmp_path, mocker):
+    """Test that obsolete k8s excludes and kube-openapi replace are removed."""
+    gomod = tmp_path / "go.mod"
+    content = """module example.com/test
+
+go 1.23
+
+exclude (
+    cloud.google.com/go v0.26.0
+    k8s.io/api v0.34.0
+    k8s.io/client-go v0.35.2
+    sigs.k8s.io/structured-merge-diff/v6 v6.3.0
+    golang.org/x/tools v0.38.0
+)
+
+replace k8s.io/kube-openapi => k8s.io/kube-openapi v0.0.0-20250701173324-9bd5c66d9911
+"""
+    gomod.write_text(content)
+
+    mock_run = mocker.patch("updater.gomod_excludes.run_command")
+
+    result = apply_gomod_excludes_and_replaces(tmp_path)
+
+    assert result is True  # Obsolete entries were removed
+    # Should have called go mod edit to drop the obsolete entries
+    assert mock_run.call_count > 0
+    calls = [str(c) for c in mock_run.call_args_list]
+    assert any("dropexclude" in c and "k8s.io/api" in c for c in calls)
+    assert any("dropexclude" in c and "k8s.io/client-go" in c for c in calls)
+    assert any("dropexclude" in c and "structured-merge-diff" in c for c in calls)
+    assert any("dropreplace" in c and "kube-openapi" in c for c in calls)
 
 
 def test_apply_excludes_missing_gomod(tmp_path):

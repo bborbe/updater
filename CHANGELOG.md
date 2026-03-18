@@ -8,6 +8,10 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## v0.17.21
+
+- refactor: Remove k8s-related excludes and kube-openapi replace from `STANDARD_EXCLUDES`/`STANDARD_REPLACES`; add `OBSOLETE_EXCLUDES_PREFIXES` and `OBSOLETE_REPLACES` so updater actively cleans up these stale workarounds from projects it updates
+
 ## v0.17.20
 
 - Add per-project `.updater.yaml` config file support so projects can disable specific update phases (`python-version`, `golang-version`, `alpine-version`, `go-dependencies`, `llm-analysis`) via a `disable` list; invalid config produces warnings and falls back to defaults without blocking updates
