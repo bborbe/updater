@@ -6,25 +6,24 @@ from pathlib import Path
 from .log_manager import log_message, run_command
 
 # Standard exclusions for problematic versions
-STANDARD_EXCLUDES = [
-    "cloud.google.com/go@v0.26.0",
-    "github.com/go-logr/glogr@v1.0.0",
-    "github.com/go-logr/glogr@v1.0.0-rc1",
-    "github.com/go-logr/logr@v1.0.0",
-    "github.com/go-logr/logr@v1.0.0-rc1",
-    "go.yaml.in/yaml/v3@v3.0.3",
-    "go.yaml.in/yaml/v3@v3.0.4",
-    "golang.org/x/tools@v0.38.0",
-    "golang.org/x/tools@v0.39.0",
-]
+# NOTE: Excludes break `go install`, so keep this list empty unless absolutely necessary.
+# Use OBSOLETE_EXCLUDES_PREFIXES to actively remove old excludes from projects.
+STANDARD_EXCLUDES: list[str] = []
 
 # Standard replacements
 # Format: (old_module, "new_module version")
 # Note: go.mod stores as "new_module version" (space-separated)
+# NOTE: Replaces break `go install`, so keep this list empty unless absolutely necessary.
 STANDARD_REPLACES: list[tuple[str, str]] = []
 
 # Exclude prefixes that should be REMOVED from projects (obsolete workarounds)
+# These broke `go install` for all modules. The updater actively removes them.
 OBSOLETE_EXCLUDES_PREFIXES = [
+    "cloud.google.com/go@",
+    "github.com/go-logr/glogr@",
+    "github.com/go-logr/logr@",
+    "go.yaml.in/yaml/v3@",
+    "golang.org/x/tools@",
     "k8s.io/api@",
     "k8s.io/apiextensions-apiserver@",
     "k8s.io/apimachinery@",

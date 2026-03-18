@@ -8,6 +8,12 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## v0.17.22
+
+- remove all remaining STANDARD_EXCLUDES (cloud.google.com/go, go-logr, go.yaml.in, golang.org/x/tools) — excludes break `go install`
+- add all former excludes to OBSOLETE_EXCLUDES_PREFIXES for active cleanup
+- fix tests for empty STANDARD_EXCLUDES
+
 ## v0.17.21
 
 - refactor: Remove k8s-related excludes and kube-openapi replace from `STANDARD_EXCLUDES`/`STANDARD_REPLACES`; add `OBSOLETE_EXCLUDES_PREFIXES` and `OBSOLETE_REPLACES` so updater actively cleans up these stale workarounds from projects it updates

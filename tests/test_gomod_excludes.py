@@ -150,15 +150,31 @@ def test_apply_excludes_to_empty_gomod(tmp_path, mocker):
 
     result = apply_gomod_excludes_and_replaces(tmp_path)
 
-    assert result is True  # Changes were made
-    # Should have called go mod edit for each exclude and replace
-    assert mock_run.call_count > 0
+    assert result is False  # No changes — standard lists are empty now
+    assert mock_run.call_count == 0
 
 
 def test_apply_excludes_idempotent(tmp_path, mocker):
-    """Test that applying excludes to an already up-to-date go.mod makes no changes."""
+    """Test that applying to a clean go.mod (no excludes, no replaces) makes no changes."""
     gomod = tmp_path / "go.mod"
-    # Pre-populate with all current standard excludes (no k8s, no kube-openapi)
+    content = """module example.com/test
+
+go 1.23
+"""
+    gomod.write_text(content)
+
+    # Mock run_command to avoid actual go mod edit calls
+    mock_run = mocker.patch("updater.gomod_excludes.run_command")
+
+    result = apply_gomod_excludes_and_replaces(tmp_path)
+
+    assert result is False  # No changes needed
+    assert mock_run.call_count == 0  # No commands run
+
+
+def test_apply_removes_old_non_k8s_excludes(tmp_path, mocker):
+    """Test that old non-k8s excludes are also removed as obsolete."""
+    gomod = tmp_path / "go.mod"
     content = """module example.com/test
 
 go 1.23
@@ -177,13 +193,12 @@ exclude (
 """
     gomod.write_text(content)
 
-    # Mock run_command to avoid actual go mod edit calls
     mock_run = mocker.patch("updater.gomod_excludes.run_command")
 
     result = apply_gomod_excludes_and_replaces(tmp_path)
 
-    assert result is False  # No changes needed
-    assert mock_run.call_count == 0  # No commands run
+    assert result is True  # Changes made — obsolete excludes removed
+    assert mock_run.call_count == 9  # 9 dropexclude calls
 
 
 def test_apply_excludes_removes_obsolete_k8s_entries(tmp_path, mocker):
