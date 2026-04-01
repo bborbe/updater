@@ -1696,6 +1696,57 @@ class TestMainGoWithDepsAsync:
         assert exit_code == 0
 
 
+class TestMainGoFixAsync:
+    """Tests for main_go_fix_async function."""
+
+    @pytest.mark.asyncio
+    async def test_no_modules_found(self, tmp_path):
+        """Test main_go_fix_async returns 1 when no Go modules found."""
+        from updater.cli import main_go_fix_async
+
+        with (
+            patch("sys.argv", ["fix-only", str(tmp_path)]),
+            patch("builtins.print"),
+        ):
+            exit_code = await main_go_fix_async()
+
+        assert exit_code == 1
+
+    @pytest.mark.asyncio
+    async def test_single_module_success(self, mock_module_path):
+        """Test main_go_fix_async processes a module with go-fix project type."""
+        from updater.cli import main_go_fix_async
+
+        with (
+            patch("sys.argv", ["fix-only", str(mock_module_path)]),
+            patch(
+                "updater.cli.process_module_with_retry",
+                new_callable=AsyncMock,
+                return_value=(True, "updated"),
+            ),
+            patch("updater.cli.play_completion_sound"),
+            patch("builtins.print"),
+        ):
+            exit_code = await main_go_fix_async()
+
+        assert exit_code == 0
+
+    @pytest.mark.asyncio
+    async def test_nonexistent_path(self, tmp_path):
+        """Test main_go_fix_async returns 1 for nonexistent path."""
+        from updater.cli import main_go_fix_async
+
+        nonexistent = tmp_path / "does-not-exist"
+
+        with (
+            patch("sys.argv", ["fix-only", str(nonexistent)]),
+            patch("builtins.print"),
+        ):
+            exit_code = await main_go_fix_async()
+
+        assert exit_code == 1
+
+
 class TestMainPythonAsync:
     """Tests for main_python_async function."""
 

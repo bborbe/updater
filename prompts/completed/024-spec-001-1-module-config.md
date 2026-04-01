@@ -1,6 +1,6 @@
 ---
 status: completed
-spec: ["001"]
+spec: [001-project-config-file]
 summary: Added per-project .updater.yaml config file support with ModuleConfig dataclass, load_module_config/is_disabled helpers, disable checks in GoVersionUpdateStep/GoDepUpdateStep/PythonVersionUpdateStep/PythonDepUpdateStep/ChangelogStep, Pipeline.run() config loading, and full test coverage in test_module_config.py
 container: updater-024-spec-001-1-module-config
 dark-factory-version: v0.32.1

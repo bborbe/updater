@@ -8,6 +8,10 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## v0.18.0
+
+- feat: Add `fix-only` CLI entry point that applies go.mod standard excludes/replaces and OSV fixes without updating Go version or dependencies
+
 ## v0.17.24
 
 - add standard replaces for go-header v0.5.0 and runtime-spec v1.2.0 (fix golangci-lint v2 compilation)

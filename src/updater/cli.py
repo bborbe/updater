@@ -152,6 +152,86 @@ async def process_single_go_module(module_path: Path, update_deps: bool = True) 
         cleanup_old_logs(module_path)
 
 
+async def process_single_go_fix_module(module_path: Path) -> tuple[bool, str]:
+    """Process a single Go module with fixes only (excludes/replaces + OSV).
+
+    Applies standard go.mod excludes/replaces and OSV vulnerability fixes
+    without updating Go version or dependencies.
+    Delegates to a composable pipeline of steps.
+
+    Args:
+        module_path: Path to the module
+
+    Returns:
+        Tuple of (success: bool, status: str)
+        status can be: 'updated', 'up-to-date', 'skipped', 'failed'
+    """
+    from .pipeline import (
+        ChangelogStep,
+        CheckChangesStep,
+        GitCommitStep,
+        GitConfirmStep,
+        GitSyncStep,
+        GoExcludesStep,
+        OsvFixStep,
+        Pipeline,
+        PrecommitStep,
+        StepStatus,
+    )
+
+    log_file = None
+    try:
+        # Setup logging for this module
+        log_file = setup_module_logging(module_path)
+
+        log_message(f"\n{'=' * 70}", to_console=True)
+        log_message(f"Module: {module_path.name}", to_console=True)
+        log_message("=" * 70, to_console=True)
+        if log_file and not config.VERBOSE_MODE:
+            print(f"  Log: {log_file}")
+
+        # Ensure .update-logs/ is in .gitignore
+        ensure_gitignore_entry(module_path, log_func=log_message)
+
+        # Find git repo first
+        git_repo = find_git_repo(module_path)
+        if not git_repo:
+            log_message("✗ No git repository found", to_console=True)
+            return (False, "failed")
+
+        # Build pipeline
+        pipeline = Pipeline(
+            [
+                GitSyncStep(),
+                GoExcludesStep(),
+                OsvFixStep(),
+                CheckChangesStep(phase="update"),
+                PrecommitStep(project_type="go"),
+                CheckChangesStep(phase="precommit"),
+                ChangelogStep(),
+                GitConfirmStep(),
+                GitCommitStep(),
+            ]
+        )
+
+        result = await pipeline.run(module_path)
+
+        if result.status == StepStatus.UP_TO_DATE:
+            return (True, "up-to-date")
+        if result.status == StepStatus.SKIP:
+            return (True, "skipped")
+        return (True, "updated")
+
+    except Exception as e:
+        log_message(f"\n✗ Error processing {module_path}: {e}", to_console=True)
+        log_message(traceback.format_exc(), to_console=config.VERBOSE_MODE)
+        return (False, "failed")
+    finally:
+        # Close logging and cleanup old logs
+        close_module_logging()
+        cleanup_old_logs(module_path)
+
+
 async def process_single_python_module(module_path: Path) -> tuple[bool, str]:
     """Process a single Python module.
 
@@ -272,6 +352,8 @@ async def process_module_with_retry(
                 success, status = True, "up-to-date"
             else:
                 success, status = True, "updated"
+        elif project_type == "go-fix":
+            success, status = await process_single_go_fix_module(module_path)
         else:
             success, status = await process_single_go_module(module_path, update_deps=update_deps)
 
@@ -816,6 +898,100 @@ async def main_go_only_async() -> int:
 def main_go_only() -> int:
     """Go version-only entry point (no dependency updates)."""
     return asyncio.run(main_go_only_async())
+
+
+async def main_go_fix_async() -> int:
+    """Apply go.mod fixes (excludes/replaces + OSV) without version or dependency updates."""
+    parser = argparse.ArgumentParser(
+        description="Apply go.mod fixes (excludes/replaces + OSV) without version or dependency updates"
+    )
+    parser.add_argument(
+        "modules",
+        nargs="*",
+        default=["."],
+        help="Path(s) to Go module(s) or parent directories (default: current directory)",
+    )
+    parser.add_argument("--verbose", action="store_true", help="Show full command output")
+    parser.add_argument(
+        "--version",
+        action="version",
+        version=f"%(prog)s {pkg_version('dependency-updater')}",
+    )
+    parser.add_argument(
+        "--model",
+        choices=["sonnet", "opus", "haiku"],
+        default="sonnet",
+        help="Claude model to use (default: sonnet)",
+    )
+    parser.add_argument(
+        "--require-commit-confirm",
+        action="store_true",
+        help="Require user confirmation before committing",
+    )
+    parser.add_argument(
+        "--yes",
+        "-y",
+        action="store_true",
+        help="Auto-accept all prompts (non-interactive mode, for CI/containers)",
+    )
+    parser.add_argument(
+        "--check-command",
+        default="",
+        metavar="CMD",
+        help='Override validation command (default: "make precommit"). Example: "make ensure test"',
+    )
+
+    args = parser.parse_args()
+    config.VERBOSE_MODE = args.verbose
+    config.MODEL = args.model
+    config.REQUIRE_CONFIRM = args.require_commit_confirm
+    config.YES_MODE = args.yes
+    config.CHECK_COMMAND = args.check_command
+    config.RUN_TIMESTAMP = datetime.now().strftime("%Y-%m-%d-%H%M%S")
+
+    # Discover Go modules only
+    print("=== Discover Go Modules ===\n")
+
+    module_paths = []
+    for path_str in args.modules:
+        path = Path(path_str).resolve()
+        if not path.exists():
+            print(f"✗ Path does not exist: {path}")
+            return 1
+        module_paths.append(path)
+
+    modules = []
+    for module_path in module_paths:
+        if (module_path / "go.mod").exists():
+            modules.append(module_path)
+        else:
+            discovered = discover_go_modules(module_path, recursive=True)
+            modules.extend(discovered)
+
+    if not modules:
+        print("✗ No Go modules found")
+        return 1
+
+    # Remove duplicates
+    modules = list(dict.fromkeys(modules))
+
+    print(f"Found {len(modules)} Go module(s)\n")
+
+    # Process each module (fixes only)
+    for i, mod in enumerate(modules, 1):
+        if len(modules) > 1:
+            print(f"\n[{i}/{len(modules)}] {mod.name}")
+        success, _ = await process_module_with_retry(mod, project_type="go-fix")
+        if not success:
+            return 1
+
+    play_completion_sound()
+    return 0
+
+
+def main_go_fix() -> int:
+    """Go fix-only entry point (excludes/replaces + OSV, no version or dep updates)."""
+    return asyncio.run(main_go_fix_async())
 
 
 async def main_go_with_deps_async() -> int:
