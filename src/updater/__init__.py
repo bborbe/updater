@@ -2,4 +2,4 @@
 
 from importlib.metadata import version
 
-__version__ = version("dependency-updater")
+__version__ = version("updater")

@@ -407,7 +407,7 @@ async def main_async() -> int:
     parser.add_argument(
         "--version",
         action="version",
-        version=f"%(prog)s {pkg_version('dependency-updater')}",
+        version=f"%(prog)s {pkg_version('updater')}",
     )
     parser.add_argument(
         "--model",
@@ -731,7 +731,7 @@ async def main_go_async() -> int:
     parser.add_argument(
         "--version",
         action="version",
-        version=f"%(prog)s {pkg_version('dependency-updater')}",
+        version=f"%(prog)s {pkg_version('updater')}",
     )
     parser.add_argument(
         "--model",
@@ -823,7 +823,7 @@ async def main_go_only_async() -> int:
     parser.add_argument(
         "--version",
         action="version",
-        version=f"%(prog)s {pkg_version('dependency-updater')}",
+        version=f"%(prog)s {pkg_version('updater')}",
     )
     parser.add_argument(
         "--model",
@@ -917,7 +917,7 @@ async def main_go_fix_async() -> int:
     parser.add_argument(
         "--version",
         action="version",
-        version=f"%(prog)s {pkg_version('dependency-updater')}",
+        version=f"%(prog)s {pkg_version('updater')}",
     )
     parser.add_argument(
         "--model",
@@ -1009,7 +1009,7 @@ async def main_go_with_deps_async() -> int:
     parser.add_argument(
         "--version",
         action="version",
-        version=f"%(prog)s {pkg_version('dependency-updater')}",
+        version=f"%(prog)s {pkg_version('updater')}",
     )
     parser.add_argument(
         "--model",
@@ -1103,7 +1103,7 @@ async def main_python_async() -> int:
     parser.add_argument(
         "--version",
         action="version",
-        version=f"%(prog)s {pkg_version('dependency-updater')}",
+        version=f"%(prog)s {pkg_version('updater')}",
     )
     parser.add_argument(
         "--model",
@@ -1206,7 +1206,7 @@ async def main_docker_async() -> int:
     parser.add_argument(
         "--version",
         action="version",
-        version=f"%(prog)s {pkg_version('dependency-updater')}",
+        version=f"%(prog)s {pkg_version('updater')}",
     )
 
     args = parser.parse_args()
@@ -1387,7 +1387,7 @@ async def main_release_async() -> int:
     parser.add_argument(
         "--version",
         action="version",
-        version=f"%(prog)s {pkg_version('dependency-updater')}",
+        version=f"%(prog)s {pkg_version('updater')}",
     )
     parser.add_argument(
         "--model",
@@ -1946,7 +1946,7 @@ async def main_updater_async() -> int:
     parser.add_argument(
         "--version",
         action="version",
-        version=f"%(prog)s {pkg_version('dependency-updater')}",
+        version=f"%(prog)s {pkg_version('updater')}",
     )
     parser.add_argument(
         "--model",
