@@ -1,21 +1,29 @@
 ---
-status: draft
+status: approved
+approved: "2026-04-01T07:32:51Z"
+branch: dark-factory/subcommand-cli-refactor
 ---
 
 ## Summary
 
-- Replace 7 individual `update-*` CLI entry points with a single `updater` binary using subcommands
+- Replace 8 individual CLI entry points with a single `updater` binary using subcommands
 - `updater go`, `updater all`, `updater python`, etc. replace `update-go`, `update-deps`, `update-python`
-- Single entry point in `pyproject.toml` instead of 7 separate scripts
+- Single entry point in `pyproject.toml` instead of 8 separate scripts
 - Shared/global flags (e.g. `--yes`, `--check-command`) defined once on the root parser
 
 ## Problem
 
-The updater exposes 7 separate commands (`update-go`, `update-deps`, `update-go-only`, `update-go-with-deps`, `update-python`, `update-docker`, `release-only`). Each has its own argument parser with duplicated flag definitions (`--yes`, `--check-command`, etc.). Adding a new global flag requires touching all parsers. Discovery is poor — users must know all command names upfront.
+The updater exposes 8 separate commands (`update-go`, `update-deps`, `update-go-only`, `update-go-with-deps`, `update-python`, `update-docker`, `release-only`, `fix-only`). Each has its own argument parser with duplicated flag definitions (`--yes`, `--check-command`, etc.). Adding a new global flag requires touching all parsers. Discovery is poor — users must know all command names upfront.
 
 ## Goal
 
 A single `updater <subcommand>` binary where subcommands map 1:1 to the current commands, shared flags are defined once on the root parser, and `pyproject.toml` has one entry point.
+
+## Assumptions
+
+- No CI scripts, Makefiles, or external projects invoke the old `update-*` / `release-only` / `fix-only` command names directly — they are only used interactively
+- argparse subparsers support inheriting parent parser flags
+- `uv` / `pyproject.toml` entry points work with a single binary that dispatches subcommands
 
 ## Non-goals
 
@@ -32,11 +40,12 @@ A single `updater <subcommand>` binary where subcommands map 1:1 to the current 
 5. `updater python` runs the same pipeline as current `update-python`
 6. `updater docker` runs the same pipeline as current `update-docker`
 7. `updater release` runs the same pipeline as current `release-only`
-8. Global flags (`--yes`, `--check-command`) defined once on root parser, apply to all subcommands
+8. `updater fix` runs the same pipeline as current `fix-only`
+9. Global flags (`--yes`, `--check-command`) defined once on root parser, apply to all subcommands
 
 ## Constraints
 
-- All existing pipeline logic and step order must remain unchanged
+- All existing pipeline logic and step order must remain unchanged (see `docs/architecture.md` for pipeline/step design)
 - All existing tests must still pass
 - `--yes`, `--check-command`, and any future global flags must behave identically to current per-parser flags
 
@@ -47,6 +56,9 @@ A single `updater <subcommand>` binary where subcommands map 1:1 to the current 
 | Unknown subcommand | Print usage with subcommand list, exit 1 | User corrects subcommand |
 | No subcommand given | Print usage, exit 1 | User provides subcommand |
 | Global flag after subcommand | Argparse handles naturally (standard behavior) | N/A |
+| Old `update-*` command invoked after migration | Command not found (removed from pyproject.toml) | User switches to `updater <subcommand>` |
+| `updater --help` | Lists all subcommands with descriptions | N/A |
+| `updater go --help` | Shows subcommand-specific flags and description | N/A |
 
 ## Acceptance Criteria
 
@@ -55,6 +67,7 @@ A single `updater <subcommand>` binary where subcommands map 1:1 to the current 
 - [ ] `updater` with no subcommand prints usage and exits 1
 - [ ] `updater unknown` exits 1 with clear error
 - [ ] `pyproject.toml` has single `updater` entry point
+- [ ] All 8 subcommands produce identical behavior to their predecessors
 - [ ] All existing tests pass
 
 ## Verification
