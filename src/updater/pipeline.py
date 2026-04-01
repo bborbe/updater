@@ -32,7 +32,7 @@ from .git_operations import (
     git_tag_from_changelog,
     update_git_branch,
 )
-from .go_updater import fix_osv_vulnerabilities, update_go_dependencies
+from .go_updater import clean_indirect_deps, fix_osv_vulnerabilities, update_go_dependencies
 from .go_updater import run_precommit as run_go_precommit
 from .gomod_excludes import apply_gomod_excludes_and_replaces
 from .log_manager import log_message, run_command
@@ -137,6 +137,16 @@ class GoDepSkipStep(Step):
         log_message("\n=== Phase 1c: Skip Dependency Updates ===", to_console=True)
         log_message("  → Updating Go version only (no dependency changes)", to_console=True)
         return StepResult(StepStatus.SKIP)
+
+
+class GoCleanIndirectStep(Step):
+    """Remove stale indirect dependencies from go.mod and re-add via go mod tidy."""
+
+    async def run(self, module_path: Path, context: dict[str, Any]) -> StepResult:
+        updates = clean_indirect_deps(module_path, log_func=log_message)
+        context.setdefault("updates_made", False)
+        context["updates_made"] = context["updates_made"] or updates
+        return StepResult(StepStatus.SUCCESS, {"changes": updates})
 
 
 class OsvFixStep(Step):

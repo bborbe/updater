@@ -159,6 +159,60 @@ def fix_osv_vulnerabilities(module_path: Path, log_func: Callable[..., None] = l
     return True
 
 
+def clean_indirect_deps(module_path: Path, log_func: Callable[..., None] = log_message) -> bool:
+    """Remove all indirect dependencies from go.mod and re-add via go mod tidy.
+
+    Parses indirect deps using go list, drops each via go mod edit -droprequire,
+    then runs go mod tidy to re-add only the actually needed ones.
+
+    Args:
+        module_path: Path to Go module
+        log_func: Logging function to use
+
+    Returns:
+        True if any indirect deps were removed, False otherwise
+    """
+    gomod_path = module_path / "go.mod"
+    if not gomod_path.exists():
+        log_func(f"  ⚠ No go.mod found at {gomod_path}", to_console=True)
+        return False
+
+    log_func("\n=== Phase 1d: Clean Indirect Dependencies ===", to_console=True)
+
+    # Parse indirect deps using go list
+    result = run_command(
+        "go list -m -f '{{if .Indirect}}{{.Path}}@{{.Version}}{{end}}' all",
+        cwd=module_path,
+        capture_output=True,
+        quiet=True,
+        log_func=log_func,
+    )
+
+    indirect_deps = [line for line in result.stdout.strip().split("\n") if line]
+
+    if not indirect_deps:
+        log_func("✓ No indirect dependencies to clean", to_console=True)
+        return False
+
+    log_func(f"  → Found {len(indirect_deps)} indirect dep(s) to remove", to_console=True)
+
+    # Drop each indirect dep via go mod edit
+    for dep in indirect_deps:
+        module_name = dep.split("@")[0]
+        run_command(
+            f"go mod edit -droprequire {module_name}",
+            cwd=module_path,
+            quiet=True,
+            log_func=log_func,
+        )
+
+    # Re-add actually needed indirect deps via go mod tidy
+    run_command("go mod tidy", cwd=module_path, quiet=True, log_func=log_func)
+
+    log_func(f"✓ Removed {len(indirect_deps)} indirect dep(s) and ran go mod tidy", to_console=True)
+    return True
+
+
 def run_precommit(module_path: Path, log_func: Callable[..., None] = log_message) -> None:
     """Run make precommit.
 

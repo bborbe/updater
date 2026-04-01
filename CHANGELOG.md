@@ -8,6 +8,10 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## v0.20.0
+
+- feat: Add `GoCleanIndirectStep` to `updater fix` pipeline to remove stale indirect deps from go.mod and re-add via `go mod tidy`
+
 ## v0.19.1
 
 - test: Add regression tests for `main_updater_async` covering subcommand dispatch, global flag propagation, and error cases

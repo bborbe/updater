@@ -172,6 +172,7 @@ async def process_single_go_fix_module(module_path: Path) -> tuple[bool, str]:
         GitCommitStep,
         GitConfirmStep,
         GitSyncStep,
+        GoCleanIndirectStep,
         GoExcludesStep,
         OsvFixStep,
         Pipeline,
@@ -204,6 +205,7 @@ async def process_single_go_fix_module(module_path: Path) -> tuple[bool, str]:
             [
                 GitSyncStep(),
                 GoExcludesStep(),
+                GoCleanIndirectStep(),
                 OsvFixStep(),
                 CheckChangesStep(phase="update"),
                 PrecommitStep(project_type="go"),
