@@ -151,9 +151,10 @@ def test_apply_excludes_to_empty_gomod(tmp_path, mocker):
     result = apply_gomod_excludes_and_replaces(tmp_path)
 
     assert result is True  # Standard replaces added
-    assert mock_run.call_count == 3  # 2 replace calls + 1 go mod download
+    assert mock_run.call_count == 5  # 4 replace calls + 1 go mod download
     calls = [str(c) for c in mock_run.call_args_list]
     assert any("go-header" in c for c in calls)
+    assert any("ginkgolinter" in c for c in calls)
     assert any("runtime-spec" in c for c in calls)
     assert any("go mod download" in c for c in calls)
 
@@ -166,7 +167,9 @@ def test_apply_excludes_idempotent(tmp_path, mocker):
 go 1.23
 
 replace (
+    github.com/charmbracelet/x/cellbuf => github.com/charmbracelet/x/cellbuf v0.0.15
     github.com/denis-tingaikin/go-header => github.com/denis-tingaikin/go-header v0.5.0
+    github.com/nunnatsa/ginkgolinter/types => github.com/nunnatsa/ginkgolinter v0.19.1
     github.com/opencontainers/runtime-spec => github.com/opencontainers/runtime-spec v1.2.0
 )
 """
@@ -207,7 +210,7 @@ exclude (
     result = apply_gomod_excludes_and_replaces(tmp_path)
 
     assert result is True  # Changes made — obsolete excludes removed + standard replaces added
-    assert mock_run.call_count == 12  # 9 dropexclude + 2 replace calls + 1 go mod download
+    assert mock_run.call_count == 14  # 9 dropexclude + 4 replace calls + 1 go mod download
 
 
 def test_apply_excludes_removes_obsolete_k8s_entries(tmp_path, mocker):
@@ -272,7 +275,9 @@ def test_apply_excludes_does_not_call_go_mod_download_when_no_changes(tmp_path, 
 go 1.23
 
 replace (
+    github.com/charmbracelet/x/cellbuf => github.com/charmbracelet/x/cellbuf v0.0.15
     github.com/denis-tingaikin/go-header => github.com/denis-tingaikin/go-header v0.5.0
+    github.com/nunnatsa/ginkgolinter/types => github.com/nunnatsa/ginkgolinter v0.19.1
     github.com/opencontainers/runtime-spec => github.com/opencontainers/runtime-spec v1.2.0
 )
 """

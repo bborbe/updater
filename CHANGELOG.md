@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## v0.20.3
+
+- add ginkgolinter/types replace to STANDARD_REPLACES
+- fix cellbuf replace missing from idempotent tests
+- audit and improve scanner-ignores prompt
+
 ## v0.20.2
 
 - fix: Run `GoCleanIndirectStep` before `GoExcludesStep` in `updater fix` pipeline to avoid stale go.sum failures

@@ -19,6 +19,10 @@ STANDARD_REPLACES: list[tuple[str, str]] = [
     ("github.com/denis-tingaikin/go-header", "github.com/denis-tingaikin/go-header v0.5.0"),
     # runtime-spec latest breaks container tooling
     ("github.com/opencontainers/runtime-spec", "github.com/opencontainers/runtime-spec v1.2.0"),
+    # ginkgolinter/types module path changed in v0.19.1+
+    ("github.com/nunnatsa/ginkgolinter/types", "github.com/nunnatsa/ginkgolinter v0.19.1"),
+    # cellbuf v0.0.13 API break with ansi v0.11.6+
+    ("github.com/charmbracelet/x/cellbuf", "github.com/charmbracelet/x/cellbuf v0.0.15"),
 ]
 
 # Exclude prefixes that should be REMOVED from projects (obsolete workarounds)
@@ -27,6 +31,7 @@ OBSOLETE_EXCLUDES_PREFIXES = [
     "cloud.google.com/go@",
     "github.com/go-logr/glogr@",
     "github.com/go-logr/logr@",
+    "github.com/golangci/golangci-lint@",  # v1 excludes break go mod tidy after v2 migration
     "go.yaml.in/yaml/v3@",
     "golang.org/x/tools@",
     "k8s.io/api@",
