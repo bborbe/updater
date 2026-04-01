@@ -8,6 +8,10 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## v0.17.24
+
+- add standard replaces for go-header v0.5.0 and runtime-spec v1.2.0 (fix golangci-lint v2 compilation)
+
 ## v0.17.23
 
 - refactor: Remove `go mod vendor` calls from `update_go_dependencies` and `fix_osv_vulnerabilities`; vendor generation is handled by `make precommit` when needed

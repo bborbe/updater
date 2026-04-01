@@ -150,16 +150,24 @@ def test_apply_excludes_to_empty_gomod(tmp_path, mocker):
 
     result = apply_gomod_excludes_and_replaces(tmp_path)
 
-    assert result is False  # No changes — standard lists are empty now
-    assert mock_run.call_count == 0
+    assert result is True  # Standard replaces added
+    assert mock_run.call_count == 2  # 2 replace calls
+    calls = [str(c) for c in mock_run.call_args_list]
+    assert any("go-header" in c for c in calls)
+    assert any("runtime-spec" in c for c in calls)
 
 
 def test_apply_excludes_idempotent(tmp_path, mocker):
-    """Test that applying to a clean go.mod (no excludes, no replaces) makes no changes."""
+    """Test that applying with all standard replaces present makes no changes."""
     gomod = tmp_path / "go.mod"
     content = """module example.com/test
 
 go 1.23
+
+replace (
+    github.com/denis-tingaikin/go-header => github.com/denis-tingaikin/go-header v0.5.0
+    github.com/opencontainers/runtime-spec => github.com/opencontainers/runtime-spec v1.2.0
+)
 """
     gomod.write_text(content)
 
@@ -197,8 +205,8 @@ exclude (
 
     result = apply_gomod_excludes_and_replaces(tmp_path)
 
-    assert result is True  # Changes made — obsolete excludes removed
-    assert mock_run.call_count == 9  # 9 dropexclude calls
+    assert result is True  # Changes made — obsolete excludes removed + standard replaces added
+    assert mock_run.call_count == 11  # 9 dropexclude + 2 replace calls
 
 
 def test_apply_excludes_removes_obsolete_k8s_entries(tmp_path, mocker):

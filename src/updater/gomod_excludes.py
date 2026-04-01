@@ -14,7 +14,12 @@ STANDARD_EXCLUDES: list[str] = []
 # Format: (old_module, "new_module version")
 # Note: go.mod stores as "new_module version" (space-separated)
 # NOTE: Replaces break `go install`, so keep this list empty unless absolutely necessary.
-STANDARD_REPLACES: list[tuple[str, str]] = []
+STANDARD_REPLACES: list[tuple[str, str]] = [
+    # go-header v1.0.0 breaks golangci-lint v2 (API incompatibility)
+    ("github.com/denis-tingaikin/go-header", "github.com/denis-tingaikin/go-header v0.5.0"),
+    # runtime-spec latest breaks container tooling
+    ("github.com/opencontainers/runtime-spec", "github.com/opencontainers/runtime-spec v1.2.0"),
+]
 
 # Exclude prefixes that should be REMOVED from projects (obsolete workarounds)
 # These broke `go install` for all modules. The updater actively removes them.
