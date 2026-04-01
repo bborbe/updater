@@ -1,7 +1,8 @@
 ---
-status: prompted
+status: verifying
 approved: "2026-04-01T07:32:51Z"
 prompted: "2026-04-01T07:34:50Z"
+verifying: "2026-04-01T07:57:14Z"
 branch: dark-factory/subcommand-cli-refactor
 ---
 

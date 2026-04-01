@@ -7,6 +7,8 @@ import pytest
 from updater import config
 from updater.cli import (
     main_async,
+    main_updater,
+    main_updater_async,
     process_module_with_retry,
     process_release_module,
     process_release_with_retry,
@@ -1894,3 +1896,264 @@ class TestMainDockerAsync:
             exit_code = await main_docker_async()
 
         assert exit_code == 0
+
+
+class TestMainUpdaterAsync:
+    """Tests for main_updater_async and main_updater functions."""
+
+    @pytest.mark.asyncio
+    async def test_no_subcommand_exits_1(self, reset_config):
+        """Test that calling updater with no subcommand prints help and returns 1."""
+        with (
+            patch("sys.argv", ["updater"]),
+            patch("builtins.print"),
+        ):
+            exit_code = await main_updater_async()
+
+        assert exit_code == 1
+
+    @pytest.mark.asyncio
+    async def test_unknown_subcommand_exits_nonzero(self, reset_config):
+        """Test that an unknown subcommand causes a non-zero exit (argparse SystemExit)."""
+        with (
+            patch("sys.argv", ["updater", "unknown-cmd"]),
+            patch("builtins.print"),
+            pytest.raises(SystemExit) as exc_info,
+        ):
+            await main_updater_async()
+
+        assert exc_info.value.code != 0
+
+    @pytest.mark.asyncio
+    async def test_go_subcommand_dispatch(self, tmp_path, reset_config):
+        """Test 'go' subcommand dispatches to process_module_with_retry with project_type='go'."""
+        (tmp_path / "go.mod").write_text("module test\n")
+
+        with (
+            patch("sys.argv", ["updater", "go", str(tmp_path)]),
+            patch(
+                "updater.cli.process_module_with_retry",
+                new_callable=AsyncMock,
+                return_value=(True, "updated"),
+            ) as mock_retry,
+            patch("updater.cli.play_completion_sound"),
+            patch("builtins.print"),
+        ):
+            exit_code = await main_updater_async()
+
+        assert exit_code == 0
+        mock_retry.assert_called_once()
+        call_kwargs = mock_retry.call_args.kwargs
+        assert call_kwargs.get("project_type") == "go"
+
+    @pytest.mark.asyncio
+    async def test_python_subcommand_dispatch(self, tmp_path, reset_config):
+        """Test 'python' subcommand dispatches with project_type='python'."""
+        (tmp_path / "pyproject.toml").write_text("[project]\nname = 'test'\n")
+        (tmp_path / "uv.lock").write_text("")
+
+        with (
+            patch("sys.argv", ["updater", "python", str(tmp_path)]),
+            patch(
+                "updater.cli.process_module_with_retry",
+                new_callable=AsyncMock,
+                return_value=(True, "updated"),
+            ) as mock_retry,
+            patch("updater.cli.play_completion_sound"),
+            patch("builtins.print"),
+        ):
+            exit_code = await main_updater_async()
+
+        assert exit_code == 0
+        mock_retry.assert_called_once()
+        call_kwargs = mock_retry.call_args.kwargs
+        assert call_kwargs.get("project_type") == "python"
+
+    @pytest.mark.asyncio
+    async def test_go_only_subcommand_dispatch(self, tmp_path, reset_config):
+        """Test 'go-only' dispatches with project_type='go' and update_deps=False."""
+        (tmp_path / "go.mod").write_text("module test\n")
+
+        with (
+            patch("sys.argv", ["updater", "go-only", str(tmp_path)]),
+            patch(
+                "updater.cli.process_module_with_retry",
+                new_callable=AsyncMock,
+                return_value=(True, "updated"),
+            ) as mock_retry,
+            patch("updater.cli.play_completion_sound"),
+            patch("builtins.print"),
+        ):
+            exit_code = await main_updater_async()
+
+        assert exit_code == 0
+        mock_retry.assert_called_once()
+        call_kwargs = mock_retry.call_args.kwargs
+        assert call_kwargs.get("project_type") == "go"
+        assert call_kwargs.get("update_deps") is False
+
+    @pytest.mark.asyncio
+    async def test_go_with_deps_subcommand_dispatch(self, tmp_path, reset_config):
+        """Test 'go-with-deps' dispatches with project_type='go' and update_deps=True."""
+        (tmp_path / "go.mod").write_text("module test\n")
+
+        with (
+            patch("sys.argv", ["updater", "go-with-deps", str(tmp_path)]),
+            patch(
+                "updater.cli.process_module_with_retry",
+                new_callable=AsyncMock,
+                return_value=(True, "updated"),
+            ) as mock_retry,
+            patch("updater.cli.play_completion_sound"),
+            patch("builtins.print"),
+        ):
+            exit_code = await main_updater_async()
+
+        assert exit_code == 0
+        mock_retry.assert_called_once()
+        call_kwargs = mock_retry.call_args.kwargs
+        assert call_kwargs.get("project_type") == "go"
+        assert call_kwargs.get("update_deps") is True
+
+    @pytest.mark.asyncio
+    async def test_fix_subcommand_dispatch(self, tmp_path, reset_config):
+        """Test 'fix' dispatches with project_type='go-fix'."""
+        (tmp_path / "go.mod").write_text("module test\n")
+
+        with (
+            patch("sys.argv", ["updater", "fix", str(tmp_path)]),
+            patch(
+                "updater.cli.process_module_with_retry",
+                new_callable=AsyncMock,
+                return_value=(True, "updated"),
+            ) as mock_retry,
+            patch("updater.cli.play_completion_sound"),
+            patch("builtins.print"),
+        ):
+            exit_code = await main_updater_async()
+
+        assert exit_code == 0
+        mock_retry.assert_called_once()
+        call_kwargs = mock_retry.call_args.kwargs
+        assert call_kwargs.get("project_type") == "go-fix"
+
+    @pytest.mark.asyncio
+    async def test_docker_subcommand_dispatch(self, tmp_path, reset_config):
+        """Test 'docker' subcommand calls update_dockerfile_images and returns 0."""
+        (tmp_path / "Dockerfile").write_text("FROM ubuntu:22.04\n")
+
+        with (
+            patch("sys.argv", ["updater", "docker", str(tmp_path)]),
+            patch("updater.cli.update_dockerfile_images", return_value=(False, [])),
+            patch("builtins.print"),
+        ):
+            exit_code = await main_updater_async()
+
+        assert exit_code == 0
+
+    @pytest.mark.asyncio
+    async def test_release_subcommand_dispatch(self, tmp_path, reset_config):
+        """Test 'release' subcommand calls process_release_with_retry and returns 0."""
+        (tmp_path / "CHANGELOG.md").write_text("# Changelog\n\n## v1.0.0\n\n- Initial release\n")
+
+        with (
+            patch("sys.argv", ["updater", "release", str(tmp_path)]),
+            patch(
+                "updater.cli.verify_claude_auth",
+                new_callable=AsyncMock,
+                return_value=(True, None),
+            ),
+            patch(
+                "updater.cli.process_release_with_retry",
+                new_callable=AsyncMock,
+                return_value=(True, "released"),
+            ) as mock_release,
+            patch("updater.cli.play_completion_sound"),
+            patch("builtins.print"),
+        ):
+            exit_code = await main_updater_async()
+
+        assert exit_code == 0
+        mock_release.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_all_subcommand_dispatch(self, tmp_path, reset_config):
+        """Test 'all' subcommand discovers and processes all module types."""
+        (tmp_path / "go.mod").write_text("module test\n")
+
+        with (
+            patch("sys.argv", ["updater", "all", str(tmp_path)]),
+            patch(
+                "updater.cli.verify_claude_auth",
+                new_callable=AsyncMock,
+                return_value=(True, None),
+            ),
+            patch("updater.cli.setup_module_logging"),
+            patch("updater.cli.close_module_logging"),
+            patch("updater.cli.find_git_repo", return_value=tmp_path),
+            patch("updater.cli.update_git_branch", return_value=True),
+            patch("updater.cli.check_git_status", return_value=(0, [])),
+            patch(
+                "updater.cli.process_module_with_retry",
+                new_callable=AsyncMock,
+                return_value=(True, "updated"),
+            ),
+            patch("updater.cli.play_completion_sound"),
+            patch("builtins.print"),
+        ):
+            exit_code = await main_updater_async()
+
+        assert exit_code == 0
+
+    @pytest.mark.asyncio
+    async def test_yes_flag_sets_config(self, tmp_path, reset_config):
+        """Test --yes flag propagates to config.YES_MODE."""
+        (tmp_path / "go.mod").write_text("module test\n")
+
+        with (
+            patch("sys.argv", ["updater", "--yes", "go", str(tmp_path)]),
+            patch(
+                "updater.cli.process_module_with_retry",
+                new_callable=AsyncMock,
+                return_value=(True, "updated"),
+            ),
+            patch("updater.cli.play_completion_sound"),
+            patch("builtins.print"),
+        ):
+            await main_updater_async()
+
+        assert config.YES_MODE is True
+
+    @pytest.mark.asyncio
+    async def test_check_command_flag_sets_config(self, tmp_path, reset_config):
+        """Test --check-command flag propagates to config.CHECK_COMMAND."""
+        (tmp_path / "go.mod").write_text("module test\n")
+
+        with (
+            patch(
+                "sys.argv", ["updater", "--check-command", "make ensure test", "go", str(tmp_path)]
+            ),
+            patch(
+                "updater.cli.process_module_with_retry",
+                new_callable=AsyncMock,
+                return_value=(True, "updated"),
+            ),
+            patch("updater.cli.play_completion_sound"),
+            patch("builtins.print"),
+        ):
+            await main_updater_async()
+
+        assert config.CHECK_COMMAND == "make ensure test"
+
+    def test_main_updater_sync_wrapper(self):
+        """Test main_updater sync wrapper calls asyncio.run and returns result."""
+
+        def mock_run(coro):
+            coro.close()
+            return 0
+
+        with patch("updater.cli.asyncio.run", side_effect=mock_run) as mock_asyncio_run:
+            result = main_updater()
+
+        assert result == 0
+        mock_asyncio_run.assert_called_once()
