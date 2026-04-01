@@ -1,14 +1,16 @@
 ---
-status: created
+status: approved
 spec: [002-subcommand-cli-refactor]
 created: "2026-04-01T08:00:00Z"
+queued: "2026-04-01T07:49:00Z"
 branch: dark-factory/subcommand-cli-refactor
 ---
 
 <summary>
 - Test coverage exists for the new `updater` subcommand entry point
 - `updater` with no subcommand is verified to print usage and return exit code 1
-- `updater go`, `updater all`, `updater python`, `updater docker`, `updater release`, `updater fix` dispatch correctly
+- All 8 subcommands (`go`, `all`, `go-only`, `go-with-deps`, `python`, `docker`, `release`, `fix`) dispatch correctly
+- Unknown subcommand returns exit code 1
 - Global flags (`--yes`, `--check-command`) set config correctly across subcommands
 - `updater --help` and `updater go --help` produce non-empty help output
 - All existing tests still pass
@@ -58,19 +60,36 @@ Add tests to `tests/test_cli.py` for `main_updater_async`. Follow existing test 
 
 6. **Subcommand dispatch — `docker`**
    - `sys.argv = ["updater", "docker", "/some/path"]`
-   - Assert `process_module_with_retry` called with `project_type="docker"` (or that the docker update logic runs)
+   - Assert `process_module_with_retry` called with `project_type="docker"`
 
-7. **Global flag `--yes` propagates**
+7. **Subcommand dispatch — `all`**
+   - `sys.argv = ["updater", "all", "/some/path"]`
+   - Mock module discovery and `process_module_with_retry` to return `(True, "ok")`
+   - Call `main_updater_async()` and assert it returns `0`
+
+8. **Subcommand dispatch — `go-only`**
+   - `sys.argv = ["updater", "go-only", "/some/path"]`
+   - Assert `process_module_with_retry` called with `project_type="go"` and `update_deps=False`
+
+9. **Subcommand dispatch — `go-with-deps`**
+   - `sys.argv = ["updater", "go-with-deps", "/some/path"]`
+   - Assert `process_module_with_retry` called with `project_type="go"` and `update_deps=True`
+
+10. **Unknown subcommand → exits 1**
+    - `sys.argv = ["updater", "unknown-cmd"]`
+    - Call `main_updater_async()` and assert return value is `1`
+
+11. **Global flag `--yes` propagates**
    - `sys.argv = ["updater", "--yes", "go", "/some/path"]`
    - Mock `process_module_with_retry` to return `(True, "ok")`
    - Call `main_updater_async()` and assert `config.YES_MODE is True`
 
-8. **Global flag `--check-command` propagates**
+12. **Global flag `--check-command` propagates**
    - `sys.argv = ["updater", "--check-command", "make ensure test", "go", "/some/path"]`
    - Mock `process_module_with_retry` to return `(True, "ok")`
    - Call `main_updater_async()` and assert `config.CHECK_COMMAND == "make ensure test"`
 
-9. **`main_updater` sync wrapper**
+13. **`main_updater` sync wrapper**
    - Patch `asyncio.run` to return `0`
    - Call `main_updater()` and assert it returns `0`
 

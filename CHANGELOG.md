@@ -8,6 +8,10 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## v0.19.0
+
+- feat: Replace 8 separate CLI entry points with a single `updater <subcommand>` binary; global flags (`--verbose`, `--model`, `--yes`, `--check-command`, `--require-commit-confirm`) defined once on root parser
+
 ## v0.18.0
 
 - feat: Add `fix-only` CLI entry point that applies go.mod standard excludes/replaces and OSV fixes without updating Go version or dependencies
