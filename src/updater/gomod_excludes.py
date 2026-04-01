@@ -15,14 +15,16 @@ STANDARD_EXCLUDES: list[str] = []
 # Note: go.mod stores as "new_module version" (space-separated)
 # NOTE: Replaces break `go install`, so keep this list empty unless absolutely necessary.
 STANDARD_REPLACES: list[tuple[str, str]] = [
-    # go-header v1.0.0 breaks golangci-lint v2 (API incompatibility)
-    ("github.com/denis-tingaikin/go-header", "github.com/denis-tingaikin/go-header v0.5.0"),
-    # runtime-spec latest breaks container tooling
-    ("github.com/opencontainers/runtime-spec", "github.com/opencontainers/runtime-spec v1.2.0"),
-    # ginkgolinter/types module path changed in v0.19.1+
-    ("github.com/nunnatsa/ginkgolinter/types", "github.com/nunnatsa/ginkgolinter v0.19.1"),
+    # gosec v2.25.0 autofix uses ModelClaude3_7SonnetLatest removed in v1.27.0
+    ("github.com/anthropics/anthropic-sdk-go", "github.com/anthropics/anthropic-sdk-go v1.26.0"),
     # cellbuf v0.0.13 API break with ansi v0.11.6+
     ("github.com/charmbracelet/x/cellbuf", "github.com/charmbracelet/x/cellbuf v0.0.15"),
+    # go-header v1.0.0 breaks golangci-lint v2 (API incompatibility)
+    ("github.com/denis-tingaikin/go-header", "github.com/denis-tingaikin/go-header v0.5.0"),
+    # osv-scalibr embeddedfs/common has os.FileInfo/fs.DirEntry mismatch with diskfs >= v1.8
+    ("github.com/diskfs/go-diskfs", "github.com/diskfs/go-diskfs v1.7.0"),
+    # upstream libs (s3-utils, service) leak pseudo-version for ginkgolinter/types
+    ("github.com/nunnatsa/ginkgolinter/types", "github.com/nunnatsa/ginkgolinter v0.19.1"),
 ]
 
 # Exclude prefixes that should be REMOVED from projects (obsolete workarounds)

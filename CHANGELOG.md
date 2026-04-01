@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## v0.20.5
+
+- add anthropic-sdk-go and diskfs replaces to STANDARD_REPLACES
+- remove obsolete runtime-spec replace
+- sort STANDARD_REPLACES alphabetically
+
 ## v0.20.4
 
 - fix: Run `GoExcludesStep` before `GoCleanIndirectStep` in fix pipeline so replaces are applied before `go mod tidy`
