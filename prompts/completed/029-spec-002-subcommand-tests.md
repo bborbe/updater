@@ -1,8 +1,13 @@
 ---
-status: approved
+status: completed
 spec: [002-subcommand-cli-refactor]
+summary: Added 13 regression tests for main_updater_async covering no-subcommand, all 8 subcommand dispatches, global flag propagation (--yes, --check-command), and main_updater sync wrapper
+container: updater-029-spec-002-subcommand-tests
+dark-factory-version: v0.80.0-1-g2b37ac1
 created: "2026-04-01T08:00:00Z"
 queued: "2026-04-01T07:49:00Z"
+started: "2026-04-01T07:52:29Z"
+completed: "2026-04-01T07:57:14Z"
 branch: dark-factory/subcommand-cli-refactor
 ---
 
