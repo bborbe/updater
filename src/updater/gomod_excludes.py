@@ -216,5 +216,7 @@ def apply_gomod_excludes_and_replaces(
 
     if not changes_made:
         log_func("  ✓ All excludes and replaces up to date", to_console=True)
+    else:
+        run_command("go mod download", cwd=module_path, quiet=True, log_func=log_func)
 
     return changes_made

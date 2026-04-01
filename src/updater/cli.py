@@ -204,8 +204,8 @@ async def process_single_go_fix_module(module_path: Path) -> tuple[bool, str]:
         pipeline = Pipeline(
             [
                 GitSyncStep(),
-                GoExcludesStep(),
                 GoCleanIndirectStep(),
+                GoExcludesStep(),
                 OsvFixStep(),
                 CheckChangesStep(phase="update"),
                 PrecommitStep(project_type="go"),

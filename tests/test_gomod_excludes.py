@@ -151,10 +151,11 @@ def test_apply_excludes_to_empty_gomod(tmp_path, mocker):
     result = apply_gomod_excludes_and_replaces(tmp_path)
 
     assert result is True  # Standard replaces added
-    assert mock_run.call_count == 2  # 2 replace calls
+    assert mock_run.call_count == 3  # 2 replace calls + 1 go mod download
     calls = [str(c) for c in mock_run.call_args_list]
     assert any("go-header" in c for c in calls)
     assert any("runtime-spec" in c for c in calls)
+    assert any("go mod download" in c for c in calls)
 
 
 def test_apply_excludes_idempotent(tmp_path, mocker):
@@ -206,7 +207,7 @@ exclude (
     result = apply_gomod_excludes_and_replaces(tmp_path)
 
     assert result is True  # Changes made — obsolete excludes removed + standard replaces added
-    assert mock_run.call_count == 11  # 9 dropexclude + 2 replace calls
+    assert mock_run.call_count == 12  # 9 dropexclude + 2 replace calls + 1 go mod download
 
 
 def test_apply_excludes_removes_obsolete_k8s_entries(tmp_path, mocker):
@@ -247,3 +248,40 @@ def test_apply_excludes_missing_gomod(tmp_path):
     result = apply_gomod_excludes_and_replaces(tmp_path)
 
     assert result is False  # No changes made
+
+
+def test_apply_excludes_calls_go_mod_download_when_changes_made(tmp_path, mocker):
+    """Test that go mod download is called when changes are made."""
+    gomod = tmp_path / "go.mod"
+    gomod.write_text("module example.com/test\n\ngo 1.23\n")
+
+    mock_run = mocker.patch("updater.gomod_excludes.run_command")
+
+    result = apply_gomod_excludes_and_replaces(tmp_path)
+
+    assert result is True
+    calls = [str(c) for c in mock_run.call_args_list]
+    assert any("go mod download" in c for c in calls)
+
+
+def test_apply_excludes_does_not_call_go_mod_download_when_no_changes(tmp_path, mocker):
+    """Test that go mod download is NOT called when no changes are made."""
+    gomod = tmp_path / "go.mod"
+    content = """module example.com/test
+
+go 1.23
+
+replace (
+    github.com/denis-tingaikin/go-header => github.com/denis-tingaikin/go-header v0.5.0
+    github.com/opencontainers/runtime-spec => github.com/opencontainers/runtime-spec v1.2.0
+)
+"""
+    gomod.write_text(content)
+
+    mock_run = mocker.patch("updater.gomod_excludes.run_command")
+
+    result = apply_gomod_excludes_and_replaces(tmp_path)
+
+    assert result is False
+    calls = [str(c) for c in mock_run.call_args_list]
+    assert not any("go mod download" in c for c in calls)

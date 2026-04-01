@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## v0.20.2
+
+- fix: Run `GoCleanIndirectStep` before `GoExcludesStep` in `updater fix` pipeline to avoid stale go.sum failures
+- fix: Call `go mod download` after `apply_gomod_excludes_and_replaces` modifies go.mod to keep go.sum in sync
+
 Please choose versions by [Semantic Versioning](http://semver.org/).
 
 * MAJOR version when you make incompatible API changes,
