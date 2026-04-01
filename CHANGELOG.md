@@ -2,6 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
+## v0.20.4
+
+- fix: Run `GoExcludesStep` before `GoCleanIndirectStep` in fix pipeline so replaces are applied before `go mod tidy`
+
 ## v0.20.3
 
 - add ginkgolinter/types replace to STANDARD_REPLACES
