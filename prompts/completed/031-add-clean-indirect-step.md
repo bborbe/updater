@@ -1,11 +1,18 @@
 ---
-status: draft
+status: completed
+summary: 'Added GoCleanIndirectStep to the updater fix pipeline: clean_indirect_deps function in go_updater.py, GoCleanIndirectStep in pipeline.py, wired between GoExcludesStep and OsvFixStep in process_single_go_fix_module, with 7 tests in test_clean_indirect.py and updated CLAUDE.md pipeline table'
+container: updater-031-add-clean-indirect-step
+dark-factory-version: v0.80.0-1-g2b37ac1
 created: "2026-04-01T09:08:52Z"
+queued: "2026-04-01T09:13:34Z"
+started: "2026-04-01T09:13:35Z"
+completed: "2026-04-01T09:15:49Z"
 ---
 <summary>
 - New `GoCleanIndirectStep` removes all `// indirect` lines from go.mod require blocks
 - `go mod tidy` re-adds only actually needed indirect deps, cleaning up stale entries
 - Step added to `fix` pipeline only, between GoExcludesStep and OsvFixStep
+- Stale indirect dependencies no longer accumulate in go.mod files processed by `updater fix`
 - Existing tests unaffected, new tests cover the step
 </summary>
 
@@ -24,22 +31,21 @@ Read docs/architecture.md — understand pipeline/step design.
 Read tests/test_gomod_excludes.py — understand test patterns for go.mod manipulation steps.
 
 The step should:
-1. Read go.mod
-2. Remove all lines containing `// indirect` from require blocks
-3. Write go.mod back
-4. Run `go mod tidy` to re-resolve indirect deps
-5. Report whether any lines were removed
+1. Parse indirect deps using `go list`
+2. Remove each via `go mod edit -droprequire` (no direct file editing per CLAUDE.md)
+3. Run `go mod tidy` to re-resolve indirect deps
+4. Report whether any lines were removed
 </context>
 
 <requirements>
-1. Add `clean_indirect_deps` function in src/updater/go_updater.py:
-   - Read go.mod content
-   - Remove lines in require blocks that end with `// indirect`
-   - Write the cleaned go.mod
+1. Add `clean_indirect_deps(module_path: Path, log_func: Callable[..., None] = log_message) -> bool` function in src/updater/go_updater.py:
+   - Parse indirect deps from go.mod using `go list -m -f '{{if .Indirect}}{{.Path}}@{{.Version}}{{end}}' all`
+   - For each indirect dep, run `go mod edit -droprequire <module>` to remove it
    - Run `go mod tidy` to re-add actually needed indirect deps
-   - Return True if any indirect lines were removed, False otherwise
+   - Return True if any indirect deps were removed, False otherwise
    - Log how many indirect deps were removed
    - If no go.mod exists, log warning and return False
+   - Note: uses `go mod edit` per CLAUDE.md convention — no direct file editing of go.mod
 
 2. Add `GoCleanIndirectStep` in src/updater/pipeline.py:
    - Follow the same pattern as GoExcludesStep
@@ -58,7 +64,7 @@ The step should:
    - No go.mod → returns False with warning
    - go.mod with mixed direct and indirect → only indirect lines removed
 
-5. Update CLAUDE.md pipeline table to show GoCleanIndirect step in both pipelines.
+5. Update CLAUDE.md pipeline table to show GoCleanIndirect step in the fix pipeline only.
 </requirements>
 
 <constraints>
