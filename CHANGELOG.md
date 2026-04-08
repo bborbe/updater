@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## v0.20.6
+
+- pin auth check to sonnet model
+- default `_run_claude` model to sonnet when unset
+
 ## v0.20.5
 
 - add anthropic-sdk-go and diskfs replaces to STANDARD_REPLACES

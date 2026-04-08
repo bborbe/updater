@@ -635,6 +635,70 @@ class TestRunClaude:
         mock_proc.kill.assert_called_once()
         mock_proc.wait.assert_awaited_once()
 
+    @pytest.mark.asyncio
+    async def test_default_model_is_sonnet(self, reset_config):
+        """When no model is passed and config.MODEL is None, defaults to sonnet."""
+        config.MODEL = None
+        mock_proc = AsyncMock()
+        mock_proc.returncode = 0
+        mock_proc.communicate = AsyncMock(return_value=(b"ok", b""))
+
+        with patch(
+            "asyncio.create_subprocess_exec", new_callable=AsyncMock, return_value=mock_proc
+        ) as mock_exec:
+            await _run_claude("test prompt")
+
+        cmd = mock_exec.call_args.args
+        assert "--model" in cmd
+        assert cmd[cmd.index("--model") + 1] == "sonnet"
+
+    @pytest.mark.asyncio
+    async def test_explicit_model_overrides_default(self, reset_config):
+        """Explicit model arg overrides config.MODEL and sonnet default."""
+        config.MODEL = "haiku"
+        mock_proc = AsyncMock()
+        mock_proc.returncode = 0
+        mock_proc.communicate = AsyncMock(return_value=(b"ok", b""))
+
+        with patch(
+            "asyncio.create_subprocess_exec", new_callable=AsyncMock, return_value=mock_proc
+        ) as mock_exec:
+            await _run_claude("test prompt", model="opus")
+
+        cmd = mock_exec.call_args.args
+        assert cmd[cmd.index("--model") + 1] == "opus"
+
+    @pytest.mark.asyncio
+    async def test_config_model_used_when_no_arg(self, reset_config):
+        """config.MODEL is used when no model arg is passed."""
+        config.MODEL = "haiku"
+        mock_proc = AsyncMock()
+        mock_proc.returncode = 0
+        mock_proc.communicate = AsyncMock(return_value=(b"ok", b""))
+
+        with patch(
+            "asyncio.create_subprocess_exec", new_callable=AsyncMock, return_value=mock_proc
+        ) as mock_exec:
+            await _run_claude("test prompt")
+
+        cmd = mock_exec.call_args.args
+        assert cmd[cmd.index("--model") + 1] == "haiku"
+
+
+class TestVerifyClaudeAuthModel:
+    """Auth check must always use sonnet regardless of config.MODEL."""
+
+    @pytest.mark.asyncio
+    async def test_auth_check_always_uses_sonnet(self, reset_config):
+        """verify_claude_auth pins model to sonnet even if config.MODEL is opus."""
+        config.MODEL = "opus"
+        with patch(
+            "updater.claude_analyzer._run_claude", new_callable=AsyncMock, return_value="ok"
+        ) as mock_run:
+            await verify_claude_auth()
+
+        assert mock_run.call_args.kwargs.get("model") == "sonnet"
+
 
 class TestWithoutClaudecode:
     """Tests for _without_claudecode context manager."""

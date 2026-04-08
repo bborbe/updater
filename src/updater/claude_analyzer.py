@@ -131,9 +131,8 @@ async def _run_claude(
         ClaudeError: If Claude exits non-zero or times out.
     """
     cmd: list[str] = ["claude", "--print", "-p", prompt, "--output-format", "text"]
-    effective_model = model or config.MODEL
-    if effective_model:
-        cmd.extend(["--model", effective_model])
+    effective_model = model or config.MODEL or "sonnet"
+    cmd.extend(["--model", effective_model])
     if config.VERBOSE_MODE:
         cmd.append("--verbose")
 
@@ -188,7 +187,7 @@ async def _verify_claude_auth_impl() -> tuple[bool, str]:
     for attempt in range(max_retries):
         call_start = time.monotonic()
         try:
-            await _run_claude("Reply with exactly: ok", timeout=30)
+            await _run_claude("Reply with exactly: ok", model="sonnet", timeout=30)
 
             metrics.record_call(
                 "auth_check", time.monotonic() - call_start, success=True, rate_limited=False
