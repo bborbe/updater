@@ -1,12 +1,16 @@
 ---
-status: draft
+status: executing
+container: updater-035-add-standard-scanner-ignore-files
+dark-factory-version: v0.107.5
 created: "2026-04-08T06:40:41Z"
+queued: "2026-04-08T06:50:48Z"
+started: "2026-04-08T06:50:50Z"
 ---
 <summary>
 - Updater distributes standard `.osv-scanner.toml` and `.trivyignore` files to Go modules
 - Repos get consistent ignore rules for known unfixable vulnerabilities
 - New pipeline step runs early, before precommit, so scanners pass
-- Ignore entries are declarative and centralized like STANDARD_REPLACES
+- Ignore entries are declarative and centralized in one list
 - Existing ignore files are merged, not overwritten
 </summary>
 
@@ -34,6 +38,10 @@ reason = "github.com/docker/docker indirect dep, no fix available"
 [[IgnoredVulns]]
 id = "GHSA-x744-4wpc-v9h2"
 reason = "github.com/docker/docker indirect dep, no fix available"
+
+[[IgnoredVulns]]
+id = "GO-2026-4923"
+reason = "go.etcd.io/bbolt v1.4.3 dep, no fix available"
 ```
 
 ```
@@ -41,13 +49,16 @@ reason = "github.com/docker/docker indirect dep, no fix available"
 # github.com/docker/docker indirect dep, no fix available via Go modules
 CVE-2026-34040
 CVE-2026-33997
+
+# go.etcd.io/bbolt v1.4.3 dep, no fix available
+CVE-2026-33817
 ```
 </context>
 
 <requirements>
 1. Create `src/updater/scanner_ignores.py` with:
    - `STANDARD_OSV_IGNORES: list[dict]` — list of `{"id": "GHSA-...", "reason": "..."}` entries
-   - `STANDARD_TRIVY_IGNORES: list[dict]` — list of `{"id": "CVE-...", "reason": "..."}` entries
+   - `STANDARD_TRIVY_IGNORES: list[dict]` — list of `{"id": "CVE-...", "reason": "..."}` entries. When writing `.trivyignore`, emit the `reason` as a `# comment` line immediately before the CVE id. Multiple CVEs sharing the same reason may be grouped under one comment (see example in `<context>`), but a simpler per-entry comment is also acceptable.
    - `apply_scanner_ignores(module_path: Path, log_func) -> bool` function that:
      - Reads existing `.osv-scanner.toml` if present, parses `[[IgnoredVulns]]` entries
      - Adds missing entries from `STANDARD_OSV_IGNORES` (skip if already present by id)
@@ -56,13 +67,13 @@ CVE-2026-33997
      - Adds missing CVE lines from `STANDARD_TRIVY_IGNORES` (skip if already present)
      - Writes updated `.trivyignore` — append new standard entries after existing user entries
      - Returns True if any changes were made
-   - Use `toml` or manual string building for `.osv-scanner.toml` (check what's available in project deps)
+   - Use manual string building for `.osv-scanner.toml` — no external TOML libraries
    - Use simple string operations for `.trivyignore`
 
 2. Create `ScannerIgnoresStep` in `src/updater/pipeline.py`:
-   - Follow existing step pattern (GoExcludesStep as model)
+   - Follow existing step pattern (`GoExcludesStep` at line 108 as model)
    - Calls `apply_scanner_ignores(module_path, log_func=log_message)`
-   - Log label: pick the next free phase number after existing steps in each pipeline (check `=== Phase` labels in pipeline.py and go_updater.py)
+   - Log with a descriptive label (e.g. `=== Apply Scanner Ignores ===`) — phase numbering not required
 
 3. Wire `ScannerIgnoresStep` into ALL Go pipelines in `src/updater/cli.py`:
    - Add after `GoExcludesStep` and before `OsvFixStep`/`PrecommitStep`
@@ -77,7 +88,7 @@ CVE-2026-33997
    - Test no changes when all entries present
    - Follow existing test patterns
 
-6. Run `make precommit` — must pass (also runs via `validationCommand`).
+6. Run `make precommit` — must pass.
 </requirements>
 
 <constraints>
@@ -88,8 +99,5 @@ CVE-2026-33997
 </constraints>
 
 <verification>
-- `make precommit` passes
-- `ScannerIgnoresStep` appears in both Go pipelines
-- New tests cover add, merge, and no-op cases
-- Existing tests still pass
+Run `make precommit` — must pass.
 </verification>
