@@ -1,5 +1,6 @@
 ---
 status: draft
+created: "2026-04-08T06:40:41Z"
 ---
 <summary>
 - Updater distributes standard `.osv-scanner.toml` and `.trivyignore` files to Go modules
