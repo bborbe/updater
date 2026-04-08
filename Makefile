@@ -13,7 +13,8 @@ help:
 	@echo "  clean         - Remove build artifacts and cache"
 
 .PHONY: install
-install: sync
+install:
+	@uv tool install -e .
 
 .PHONY: sync
 sync:
