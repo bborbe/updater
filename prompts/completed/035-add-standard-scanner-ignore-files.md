@@ -1,10 +1,11 @@
 ---
-status: executing
+status: completed
 container: updater-035-add-standard-scanner-ignore-files
 dark-factory-version: v0.107.5
 created: "2026-04-08T06:40:41Z"
 queued: "2026-04-08T06:50:48Z"
 started: "2026-04-08T06:50:50Z"
+completed: "2026-04-08T06:54:41Z"
 ---
 <summary>
 - Updater distributes standard `.osv-scanner.toml` and `.trivyignore` files to Go modules
