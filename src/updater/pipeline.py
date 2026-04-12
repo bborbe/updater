@@ -441,6 +441,40 @@ class GitPushStep(Step):
 
 
 # ---------------------------------------------------------------------------
+# Commit uncommitted step
+# ---------------------------------------------------------------------------
+
+
+class CommitUncommittedStep(Step):
+    """Commit any uncommitted changes before release check.
+
+    If the working tree is dirty (staged, unstaged, or untracked files),
+    commits them with a simple message so ReleaseStep can see them.
+    """
+
+    async def run(self, module_path: Path, context: dict[str, Any]) -> StepResult:
+        result = run_command(
+            "git status --porcelain", cwd=module_path, quiet=True, log_func=log_message
+        )
+        stdout = result.stdout.strip() if result.stdout else ""
+
+        if not stdout:
+            return StepResult(StepStatus.UP_TO_DATE)
+
+        log_message("→ Uncommitted changes detected:", to_console=True)
+        for line in stdout.splitlines():
+            log_message(f"  {line}", to_console=True)
+
+        run_command("git add .", cwd=module_path, quiet=True, log_func=log_message)
+        run_command(
+            'git commit -m "update files"', cwd=module_path, quiet=True, log_func=log_message
+        )
+        log_message("→ Committed uncommitted changes", to_console=True)
+
+        return StepResult(StepStatus.SUCCESS)
+
+
+# ---------------------------------------------------------------------------
 # Release step
 # ---------------------------------------------------------------------------
 

@@ -1264,6 +1264,7 @@ async def process_release_module(module_path: Path) -> tuple[bool, str]:
         status can be: 'released', 'nothing-to-release', 'skipped', 'failed'
     """
     from .pipeline import (
+        CommitUncommittedStep,
         GitCommitStep,
         GitPushStep,
         Pipeline,
@@ -1290,9 +1291,10 @@ async def process_release_module(module_path: Path) -> tuple[bool, str]:
             log_message("✗ No git repository found", to_console=True)
             return (False, "failed")
 
-        # Build pipeline: Release → Commit → Push
+        # Build pipeline: CommitUncommitted → Release → Commit → Push
         pipeline = Pipeline(
             [
+                CommitUncommittedStep(),
                 ReleaseStep(),
                 GitCommitStep(),
                 GitPushStep(),

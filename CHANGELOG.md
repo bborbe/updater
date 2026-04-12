@@ -2,6 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
+## v0.21.0
+
+- feat: Add `CommitUncommittedStep` to `updater release` pipeline so manually edited files are committed before the release check, preventing silent "Nothing to release" when uncommitted changes exist
+
 ## v0.20.7
 
 - fix: Handle optional registry prefix (e.g. `${DOCKER_REGISTRY}/`, `docker.io/library/`) in Dockerfile golang and alpine version update regexes, preserving prefix in replacement
