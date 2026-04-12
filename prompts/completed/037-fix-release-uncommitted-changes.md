@@ -1,12 +1,18 @@
 ---
-status: ""
+status: completed
+summary: Added CommitUncommittedStep to updater release pipeline so uncommitted changes are auto-committed before ReleaseStep checks for new releases
+container: updater-037-fix-release-uncommitted-changes
+dark-factory-version: v0.108.0-dirty
 created: "2026-04-12T07:50:21Z"
+queued: "2026-04-12T07:53:32Z"
+started: "2026-04-12T07:53:35Z"
+completed: "2026-04-12T07:54:56Z"
 ---
 <summary>
-- `updater release` ignores uncommitted/unstaged changes in the working tree
-- `ReleaseStep` checks `get_commits_since_tag()` which only sees committed changes
-- If Dockerfile or other files were edited but not committed, release reports "Nothing to release (no commits since last tag)"
-- The fix adds a pre-commit step to the release pipeline that detects dirty working tree, analyzes changes with Claude, commits them, then proceeds with normal release flow
+- Running `updater release` with uncommitted file edits silently ignores them and reports "Nothing to release"
+- Only committed changes are detected — staged, unstaged, and untracked files are invisible to the release check
+- After the fix, uncommitted changes are auto-committed before checking for new releases
+- Existing release behavior for already-committed changes is unchanged
 </summary>
 
 <objective>
@@ -21,6 +27,8 @@ Read `src/updater/pipeline.py` class `ChangelogStep` (line 289) — this is how 
 Read `src/updater/git_operations.py` function `git_commit` (line 235) — does `git add . && git commit`.
 Read `src/updater/git_operations.py` function `get_commits_since_tag` (line 407) — only sees committed changes.
 Read `src/updater/pipeline.py` class `CheckChangesStep` (line 211) — detects file changes in working tree.
+Read `docs/dod.md` for quality standards (especially test conventions: no real subprocess/filesystem calls in tests).
+Read `docs/architecture.md` for pipeline step contracts.
 
 Bug scenario:
 1. User manually edits Dockerfile (e.g. bumps golang version)
@@ -31,24 +39,26 @@ Bug scenario:
 
 <requirements>
 1. Create a new pipeline step `CommitUncommittedStep` in `src/updater/pipeline.py`:
-   - Check for uncommitted changes using `git status --porcelain` via `subprocess.run`
-   - If working tree is clean, return `StepResult(StepStatus.UP_TO_DATE)` (continue pipeline, not skip)
+   - Check for uncommitted changes using `run_command("git status --porcelain", ...)` and inspect stdout
+   - If working tree is clean (empty output), return `StepResult(StepStatus.UP_TO_DATE)` (continue pipeline, not skip)
    - If dirty, log the changed files
-   - Run `git add .` and `git commit -m "update files"` via the existing `run_command` utility (import from `.log_manager`)
+   - Run `git add .` and `git commit -m "update files"` via `run_command` (import from `.log_manager`)
    - Log what was committed (e.g. "→ Committed uncommitted changes")
    - Return `StepResult(StepStatus.SUCCESS)`
    - Follow the existing Step base class pattern (async run, return StepResult)
+   - Let exceptions propagate (consistent with other steps — no extra error handling)
 
-2. In `process_release_module` (line 1294 of `src/updater/cli.py`), insert `CommitUncommittedStep()` as the FIRST step in the pipeline, before `ReleaseStep()`. The pipeline becomes:
+2. In `process_release_module` (~line 1294 of `src/updater/cli.py`), insert `CommitUncommittedStep()` as the FIRST step in the pipeline, before `ReleaseStep()`. Update the import block (~line 1266) to include `CommitUncommittedStep`. The pipeline becomes:
    ```
    CommitUncommittedStep → ReleaseStep → GitCommitStep → GitPushStep
    ```
 
 3. Add tests in `tests/test_commit_uncommitted_step.py`:
-   - Test clean working tree: step returns UP_TO_DATE, no commit created
-   - Test dirty working tree (modified file): step commits changes, new commit exists in log
-   - Test untracked file: step commits it
-   - Use `tmp_path`, init a real git repo with `subprocess.run` (git init, initial commit), then modify files and run step
+   - Test clean working tree: mock `run_command` for `git status --porcelain` returning empty stdout → step returns UP_TO_DATE, `git add`/`git commit` NOT called
+   - Test dirty working tree: mock `run_command` for `git status --porcelain` returning " M Dockerfile\n" → step calls `git add .` and `git commit`, returns SUCCESS
+   - Test untracked file: mock returning "?? newfile.txt\n" → same commit behavior
+   - Use `mocker` fixture for mocking `run_command`, `tmp_path` for module path
+   - Follow existing test patterns in `tests/test_pipeline.py` — no real subprocess or filesystem calls
    - Mark tests `@pytest.mark.asyncio`
 
 4. Update `CLAUDE.md` pipeline table: `updater release` row should read `CommitUncommitted → Release → GitCommit → GitPush`.
@@ -59,8 +69,7 @@ Bug scenario:
 - Do NOT modify `ReleaseStep` — it correctly handles the "no commits" case; the fix is ensuring uncommitted changes become commits before `ReleaseStep` runs
 - Do NOT modify `GitCommitStep` — it handles the release commit (changelog promotion)
 - The commit message for uncommitted changes should be simple ("update files") — the `ReleaseStep` + `ChangelogStep` in the release flow will analyze all commits including this one
-- Use `subprocess.run` for `git status --porcelain` check (consistent with `get_commits_since_tag` pattern)
-- Use `run_command` from `.log_manager` for `git add` and `git commit` (consistent with `git_commit` in `git_operations.py`)
+- Use `run_command` for all shell operations (consistent with project DoD — no direct `subprocess` calls)
 </constraints>
 
 <verification>
