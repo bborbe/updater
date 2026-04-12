@@ -2,6 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
+## v0.20.7
+
+- fix: Handle optional registry prefix (e.g. `${DOCKER_REGISTRY}/`, `docker.io/library/`) in Dockerfile golang and alpine version update regexes, preserving prefix in replacement
+
 ## v0.20.6
 
 - pin auth check to sonnet model

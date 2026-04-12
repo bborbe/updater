@@ -295,6 +295,67 @@ def test_update_dockerfile_alpine(tmp_path):
     assert not update_dockerfile_alpine(tmp_path, "3.22")
 
 
+def test_update_dockerfile_golang_registry_prefix(tmp_path):
+    """Test updating golang version in Dockerfile with registry prefix."""
+    dockerfile = tmp_path / "Dockerfile"
+
+    # Test case 1: Variable registry prefix with AS clause
+    dockerfile.write_text("FROM ${DOCKER_REGISTRY}/golang:1.23.4 AS build\n")
+    assert update_dockerfile_golang(tmp_path, "1.25.5")
+    assert "FROM ${DOCKER_REGISTRY}/golang:1.25.5 AS build\n" == dockerfile.read_text()
+
+    # Test case 2: docker.io/library prefix
+    dockerfile.write_text("FROM docker.io/library/golang:1.23.4\n")
+    assert update_dockerfile_golang(tmp_path, "1.25.5")
+    assert "FROM docker.io/library/golang:1.25.5\n" == dockerfile.read_text()
+
+    # Test case 3: Bare FROM still works
+    dockerfile.write_text("FROM golang:1.23.4 AS build\n")
+    assert update_dockerfile_golang(tmp_path, "1.25.5")
+    assert "FROM golang:1.25.5 AS build\n" == dockerfile.read_text()
+
+
+def test_update_dockerfile_alpine_registry_prefix(tmp_path):
+    """Test updating alpine version in Dockerfile with registry prefix."""
+    dockerfile = tmp_path / "Dockerfile"
+
+    # Test case 1: Variable registry prefix with AS clause
+    dockerfile.write_text("FROM ${DOCKER_REGISTRY}/alpine:3.19 AS alpine\n")
+    assert update_dockerfile_alpine(tmp_path, "3.22")
+    assert "FROM ${DOCKER_REGISTRY}/alpine:3.22 AS alpine\n" == dockerfile.read_text()
+
+    # Test case 2: docker.io/library prefix
+    dockerfile.write_text("FROM docker.io/library/alpine:3.19\n")
+    assert update_dockerfile_alpine(tmp_path, "3.22")
+    assert "FROM docker.io/library/alpine:3.22\n" == dockerfile.read_text()
+
+    # Test case 3: Bare FROM still works
+    dockerfile.write_text("FROM alpine:3.19 AS alpine\n")
+    assert update_dockerfile_alpine(tmp_path, "3.22")
+    assert "FROM alpine:3.22 AS alpine\n" == dockerfile.read_text()
+
+
+def test_update_versions_registry_prefix(tmp_path):
+    """Test update_versions with Dockerfile using ${DOCKER_REGISTRY}/ prefix."""
+    dockerfile = tmp_path / "Dockerfile"
+    dockerfile.write_text(
+        "ARG DOCKER_REGISTRY=docker.quant.benjamin-borbe.de:443\n"
+        "FROM ${DOCKER_REGISTRY}/golang:1.23.4 AS build\n"
+        "FROM ${DOCKER_REGISTRY}/alpine:3.19 AS alpine\n"
+    )
+
+    with (
+        patch("updater.version_updater.get_latest_golang_version", return_value="1.25.5"),
+        patch("updater.version_updater.get_latest_alpine_version", return_value="3.22"),
+    ):
+        result = update_versions(tmp_path)
+
+    assert result is True
+    content = dockerfile.read_text()
+    assert "FROM ${DOCKER_REGISTRY}/golang:1.25.5 AS build" in content
+    assert "FROM ${DOCKER_REGISTRY}/alpine:3.22 AS alpine" in content
+
+
 def test_update_gomod_version(tmp_path):
     """Test updating go version in go.mod."""
     gomod = tmp_path / "go.mod"

@@ -91,13 +91,15 @@ def update_dockerfile_golang(
     original_content = content
 
     # Pattern: FROM golang:1.23.4 or FROM golang:1.23.4-alpine3.20 or FROM golang:1.23.4 AS build
-    # Replace with new version but keep any suffix and AS clause
-    pattern = r"FROM golang:(\d+\.\d+\.\d+)([-\w.]*)(\s+AS\s+\w+)?"
+    # Also matches FROM ${DOCKER_REGISTRY}/golang:... or FROM registry.example.com/golang:...
+    # Replace with new version but keep any prefix, suffix and AS clause
+    pattern = r"FROM (\S+/)?golang:(\d+\.\d+\.\d+)([-\w.]*)(\s+AS\s+\w+)?"
 
     def replace_version(match: re.Match[str]) -> str:
-        suffix = match.group(2) if match.group(2) else ""
-        as_clause = match.group(3) if match.group(3) else ""
-        return f"FROM golang:{new_version}{suffix}{as_clause}"
+        prefix = match.group(1) if match.group(1) else ""
+        suffix = match.group(3) if match.group(3) else ""
+        as_clause = match.group(4) if match.group(4) else ""
+        return f"FROM {prefix}golang:{new_version}{suffix}{as_clause}"
 
     content = re.sub(pattern, replace_version, content)
 
@@ -130,11 +132,14 @@ def update_dockerfile_alpine(
     original_content = content
 
     # Pattern: FROM alpine:3.19 or FROM alpine:3.19.1 or FROM alpine:3.19 AS alpine
-    pattern = r"FROM alpine:(\d+\.\d+(?:\.\d+)?)(\s+AS\s+\w+)?"
+    # Also matches FROM ${DOCKER_REGISTRY}/alpine:... or FROM registry.example.com/alpine:...
+    # Replace with new version but keep any prefix and AS clause
+    pattern = r"FROM (\S+/)?alpine:(\d+\.\d+(?:\.\d+)?)(\s+AS\s+\w+)?"
 
     def replace_version(match: re.Match[str]) -> str:
-        as_clause = match.group(2) if match.group(2) else ""
-        return f"FROM alpine:{new_version}{as_clause}"
+        prefix = match.group(1) if match.group(1) else ""
+        as_clause = match.group(3) if match.group(3) else ""
+        return f"FROM {prefix}alpine:{new_version}{as_clause}"
 
     content = re.sub(pattern, replace_version, content)
 
