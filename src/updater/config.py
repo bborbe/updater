@@ -15,6 +15,7 @@ REQUIRE_CONFIRM = False  # Require user confirmation before commits
 NO_TAG = False  # Add to Unreleased instead of creating version/tag
 YES_MODE = False  # Auto-accept all prompts (non-interactive mode, for CI/containers)
 CHECK_COMMAND: str = ""  # Override precommit command (empty = use default "make precommit")
+NO_GIT = False  # Skip all git operations (for containers without .git access)
 
 # Go updater configuration
 GO_MAX_ITERATIONS = 10

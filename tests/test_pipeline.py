@@ -110,6 +110,7 @@ async def test_pipeline_creates_context_if_none(tmp_path):
 async def test_pipeline_git_confirm_skip_returns_early(tmp_path):
     """Test Pipeline returns early when GitConfirmStep returns SKIP."""
     with patch("updater.pipeline.config") as mock_config:
+        mock_config.NO_GIT = False
         mock_config.REQUIRE_CONFIRM = True
 
         with patch("updater.pipeline.prompt_yes_no", return_value=False):
@@ -210,6 +211,7 @@ async def test_release_step_with_unreleased_entries(tmp_path):
         ),
         patch("builtins.print"),
     ):
+        mock_config.NO_GIT = False
         mock_config.REQUIRE_CONFIRM = False
 
         step = ReleaseStep()

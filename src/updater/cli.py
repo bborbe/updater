@@ -16,6 +16,7 @@ from .git_operations import (
     check_git_status,
     ensure_gitignore_entry,
     find_git_repo,
+    is_git_available,
     update_git_branch,
 )
 from .log_manager import (
@@ -107,14 +108,15 @@ async def process_single_go_module(module_path: Path, update_deps: bool = True) 
         if log_file and not config.VERBOSE_MODE:
             print(f"  Log: {log_file}")
 
-        # Ensure .update-logs/ is in .gitignore
-        ensure_gitignore_entry(module_path, log_func=log_message)
+        if not config.NO_GIT:
+            # Ensure .update-logs/ is in .gitignore
+            ensure_gitignore_entry(module_path, log_func=log_message)
 
-        # Find git repo first
-        git_repo = find_git_repo(module_path)
-        if not git_repo:
-            log_message("✗ No git repository found", to_console=True)
-            return (False, "failed")
+            # Find git repo first
+            git_repo = find_git_repo(module_path)
+            if not git_repo:
+                log_message("✗ No git repository found", to_console=True)
+                return (False, "failed")
 
         # Build pipeline
         dep_step = GoDepUpdateStep() if update_deps else GoDepSkipStep()
@@ -191,14 +193,15 @@ async def process_single_go_fix_module(module_path: Path) -> tuple[bool, str]:
         if log_file and not config.VERBOSE_MODE:
             print(f"  Log: {log_file}")
 
-        # Ensure .update-logs/ is in .gitignore
-        ensure_gitignore_entry(module_path, log_func=log_message)
+        if not config.NO_GIT:
+            # Ensure .update-logs/ is in .gitignore
+            ensure_gitignore_entry(module_path, log_func=log_message)
 
-        # Find git repo first
-        git_repo = find_git_repo(module_path)
-        if not git_repo:
-            log_message("✗ No git repository found", to_console=True)
-            return (False, "failed")
+            # Find git repo first
+            git_repo = find_git_repo(module_path)
+            if not git_repo:
+                log_message("✗ No git repository found", to_console=True)
+                return (False, "failed")
 
         # Build pipeline
         pipeline = Pipeline(
@@ -271,14 +274,15 @@ async def process_single_python_module(module_path: Path) -> tuple[bool, str]:
         if log_file and not config.VERBOSE_MODE:
             print(f"  Log: {log_file}")
 
-        # Ensure .update-logs/ is in .gitignore
-        ensure_gitignore_entry(module_path, log_func=log_message)
+        if not config.NO_GIT:
+            # Ensure .update-logs/ is in .gitignore
+            ensure_gitignore_entry(module_path, log_func=log_message)
 
-        # Find git repo first
-        git_repo = find_git_repo(module_path)
-        if not git_repo:
-            log_message("✗ No git repository found", to_console=True)
-            return (False, "failed")
+            # Find git repo first
+            git_repo = find_git_repo(module_path)
+            if not git_repo:
+                log_message("✗ No git repository found", to_console=True)
+                return (False, "failed")
 
         # Build pipeline
         pipeline = Pipeline(
@@ -442,6 +446,11 @@ async def main_async() -> int:
         metavar="CMD",
         help='Override validation command (default: "make precommit"). Example: "make ensure test"',
     )
+    parser.add_argument(
+        "--no-git",
+        action="store_true",
+        help="Skip all git operations (for environments without .git access, e.g. dark-factory hideGit)",
+    )
 
     args = parser.parse_args()
 
@@ -452,20 +461,29 @@ async def main_async() -> int:
     config.NO_TAG = args.no_tag
     config.YES_MODE = args.yes
     config.CHECK_COMMAND = args.check_command
+    config.NO_GIT = args.no_git
     config.RUN_TIMESTAMP = datetime.now().strftime("%Y-%m-%d-%H%M%S")
+
+    # Auto-detect: if --no-git not explicit, check if git is available
+    if not config.NO_GIT and not is_git_available(Path.cwd()):
+        print("⚠ Git not available, enabling --no-git mode automatically\n")
+        config.NO_GIT = True
 
     # Setup early logging before auth so failures are diagnosable
     setup_module_logging(Path.cwd())
 
-    # Step 0: Verify Claude authentication
-    print("=== Step 0: Verify Claude Authentication ===\n")
-    auth_ok, auth_error = await verify_claude_auth()
-    close_module_logging()
-    if not auth_ok:
-        print(f"✗ {auth_error}")
-        play_completion_sound()
-        return 1
-    print("✓ Claude authentication verified\n")
+    if config.NO_GIT:
+        print("=== Running in --no-git mode (skipping git operations) ===\n")
+    else:
+        # Step 0: Verify Claude authentication
+        print("=== Step 0: Verify Claude Authentication ===\n")
+        auth_ok, auth_error = await verify_claude_auth()
+        close_module_logging()
+        if not auth_ok:
+            print(f"✗ {auth_error}")
+            play_completion_sound()
+            return 1
+        print("✓ Claude authentication verified\n")
 
     # Step 1: Discover all modules (Go and Python)
     print("=== Step 1: Discover Modules ===\n")
@@ -546,72 +564,73 @@ async def main_async() -> int:
     all_modules.extend((mod, "python") for mod in python_modules)
     all_modules.extend((mod, "docker") for mod in docker_projects)
 
-    # Find unique git repos for all modules
-    module_repos = set()
-    for module, _ in all_modules:
-        module_repo = find_git_repo(module)
-        if module_repo:
-            module_repos.add(module_repo)
+    if not config.NO_GIT:
+        # Find unique git repos for all modules
+        module_repos = set()
+        for module, _ in all_modules:
+            module_repo = find_git_repo(module)
+            if module_repo:
+                module_repos.add(module_repo)
 
-    # Step 2: Update git repositories
-    if args.skip_git_update:
-        print("=== Step 2: Update Git Repositories ===\n")
-        print("⚠ Skipping git update (--skip-git-update flag set)\n")
-    else:
-        print("=== Step 2: Update Git Repositories ===\n")
-        print(f"Updating {len(module_repos)} unique git repository(ies)\n")
+        # Step 2: Update git repositories
+        if args.skip_git_update:
+            print("=== Step 2: Update Git Repositories ===\n")
+            print("⚠ Skipping git update (--skip-git-update flag set)\n")
+        else:
+            print("=== Step 2: Update Git Repositories ===\n")
+            print(f"Updating {len(module_repos)} unique git repository(ies)\n")
 
-        update_errors = []
+            update_errors = []
 
-        for repo in sorted(module_repos):
-            print(f"→ {repo.name}")
-            if not update_git_branch(repo):
-                update_errors.append(repo)
+            for repo in sorted(module_repos):
+                print(f"→ {repo.name}")
+                if not update_git_branch(repo):
+                    update_errors.append(repo)
 
-        print()
-
-        if update_errors:
-            print("✗ Failed to update repositories:\n")
-            for repo in update_errors:
-                print(f"  - {repo}")
-            print("\nCannot proceed. Please fix errors and try again.")
-            play_completion_sound()
-            return 1
-
-    # Step 3: Check for uncommitted changes
-    print("=== Step 3: Check for Uncommitted Changes ===\n")
-
-    dirty_modules = []
-
-    for module, project_type in all_modules:
-        change_count, files = check_git_status(module)
-
-        if change_count == -1:
-            print(f"✗ Failed to check status: {module.name}")
-            play_completion_sound()
-            return 1
-
-        if change_count > 0:
-            dirty_modules.append((module, change_count, files, project_type))
-
-    if dirty_modules:
-        print("⚠ Uncommitted changes detected in module(s):\n")
-        for module, count, files, _ in dirty_modules:
-            print(f"  - {module.name}: {count} file(s)")
-
-            condensed_files = condense_file_list(files)
-            if len(condensed_files) <= 20:
-                for f in condensed_files:
-                    print(f"      {f}")
             print()
 
-        if not prompt_yes_no("Continue anyway?", default_yes=True):
-            print("\n✗ Aborted by user")
-            play_completion_sound()
-            return 1
-        print()
-    else:
-        print("✓ No uncommitted changes in module(s)\n")
+            if update_errors:
+                print("✗ Failed to update repositories:\n")
+                for repo in update_errors:
+                    print(f"  - {repo}")
+                print("\nCannot proceed. Please fix errors and try again.")
+                play_completion_sound()
+                return 1
+
+        # Step 3: Check for uncommitted changes
+        print("=== Step 3: Check for Uncommitted Changes ===\n")
+
+        dirty_modules = []
+
+        for module, project_type in all_modules:
+            change_count, files = check_git_status(module)
+
+            if change_count == -1:
+                print(f"✗ Failed to check status: {module.name}")
+                play_completion_sound()
+                return 1
+
+            if change_count > 0:
+                dirty_modules.append((module, change_count, files, project_type))
+
+        if dirty_modules:
+            print("⚠ Uncommitted changes detected in module(s):\n")
+            for module, count, files, _ in dirty_modules:
+                print(f"  - {module.name}: {count} file(s)")
+
+                condensed_files = condense_file_list(files)
+                if len(condensed_files) <= 20:
+                    for f in condensed_files:
+                        print(f"      {f}")
+                print()
+
+            if not prompt_yes_no("Continue anyway?", default_yes=True):
+                print("\n✗ Aborted by user")
+                play_completion_sound()
+                return 1
+            print()
+        else:
+            print("✓ No uncommitted changes in module(s)\n")
 
     print("=" * 70 + "\n")
 
@@ -1637,6 +1656,9 @@ async def _run_docker_modules(modules_args: list[str]) -> int:
 
 async def _run_release_modules(modules_args: list[str]) -> int:
     """Discover modules with CHANGELOG.md and release each one."""
+    if config.NO_GIT:
+        print("✗ Release requires git (incompatible with --no-git mode)")
+        return 1
     # Step 0: Verify Claude authentication
     print("=== Step 0: Verify Claude Authentication ===\n")
     auth_ok, auth_error = await verify_claude_auth()
@@ -1722,15 +1744,16 @@ async def _run_all_modules(modules_args: list[str]) -> int:
     # Setup early logging before auth so failures are diagnosable
     setup_module_logging(Path.cwd())
 
-    # Step 0: Verify Claude authentication
-    print("=== Step 0: Verify Claude Authentication ===\n")
-    auth_ok, auth_error = await verify_claude_auth()
-    close_module_logging()
-    if not auth_ok:
-        print(f"✗ {auth_error}")
-        play_completion_sound()
-        return 1
-    print("✓ Claude authentication verified\n")
+    if not config.NO_GIT:
+        # Step 0: Verify Claude authentication
+        print("=== Step 0: Verify Claude Authentication ===\n")
+        auth_ok, auth_error = await verify_claude_auth()
+        close_module_logging()
+        if not auth_ok:
+            print(f"✗ {auth_error}")
+            play_completion_sound()
+            return 1
+        print("✓ Claude authentication verified\n")
 
     # Step 1: Discover all modules
     print("=== Step 1: Discover Modules ===\n")
@@ -1803,60 +1826,61 @@ async def _run_all_modules(modules_args: list[str]) -> int:
     all_modules.extend((mod, "python") for mod in python_modules)
     all_modules.extend((mod, "docker") for mod in docker_projects)
 
-    module_repos = set()
-    for module, _ in all_modules:
-        module_repo = find_git_repo(module)
-        if module_repo:
-            module_repos.add(module_repo)
+    if not config.NO_GIT:
+        module_repos = set()
+        for module, _ in all_modules:
+            module_repo = find_git_repo(module)
+            if module_repo:
+                module_repos.add(module_repo)
 
-    # Step 2: Update git repositories
-    print("=== Step 2: Update Git Repositories ===\n")
-    print(f"Updating {len(module_repos)} unique git repository(ies)\n")
+        # Step 2: Update git repositories
+        print("=== Step 2: Update Git Repositories ===\n")
+        print(f"Updating {len(module_repos)} unique git repository(ies)\n")
 
-    update_errors = []
-    for repo in sorted(module_repos):
-        print(f"→ {repo.name}")
-        if not update_git_branch(repo):
-            update_errors.append(repo)
-    print()
-
-    if update_errors:
-        print("✗ Failed to update repositories:\n")
-        for repo in update_errors:
-            print(f"  - {repo}")
-        print("\nCannot proceed. Please fix errors and try again.")
-        play_completion_sound()
-        return 1
-
-    # Step 3: Check for uncommitted changes
-    print("=== Step 3: Check for Uncommitted Changes ===\n")
-
-    dirty_modules = []
-    for module, project_type in all_modules:
-        change_count, files = check_git_status(module)
-        if change_count == -1:
-            print(f"✗ Failed to check status: {module.name}")
-            play_completion_sound()
-            return 1
-        if change_count > 0:
-            dirty_modules.append((module, change_count, files, project_type))
-
-    if dirty_modules:
-        print("⚠ Uncommitted changes detected in module(s):\n")
-        for module, count, files, _ in dirty_modules:
-            print(f"  - {module.name}: {count} file(s)")
-            condensed_files = condense_file_list(files)
-            if len(condensed_files) <= 20:
-                for f in condensed_files:
-                    print(f"      {f}")
-            print()
-        if not prompt_yes_no("Continue anyway?", default_yes=True):
-            print("\n✗ Aborted by user")
-            play_completion_sound()
-            return 1
+        update_errors = []
+        for repo in sorted(module_repos):
+            print(f"→ {repo.name}")
+            if not update_git_branch(repo):
+                update_errors.append(repo)
         print()
-    else:
-        print("✓ No uncommitted changes in module(s)\n")
+
+        if update_errors:
+            print("✗ Failed to update repositories:\n")
+            for repo in update_errors:
+                print(f"  - {repo}")
+            print("\nCannot proceed. Please fix errors and try again.")
+            play_completion_sound()
+            return 1
+
+        # Step 3: Check for uncommitted changes
+        print("=== Step 3: Check for Uncommitted Changes ===\n")
+
+        dirty_modules = []
+        for module, project_type in all_modules:
+            change_count, files = check_git_status(module)
+            if change_count == -1:
+                print(f"✗ Failed to check status: {module.name}")
+                play_completion_sound()
+                return 1
+            if change_count > 0:
+                dirty_modules.append((module, change_count, files, project_type))
+
+        if dirty_modules:
+            print("⚠ Uncommitted changes detected in module(s):\n")
+            for module, count, files, _ in dirty_modules:
+                print(f"  - {module.name}: {count} file(s)")
+                condensed_files = condense_file_list(files)
+                if len(condensed_files) <= 20:
+                    for f in condensed_files:
+                        print(f"      {f}")
+                print()
+            if not prompt_yes_no("Continue anyway?", default_yes=True):
+                print("\n✗ Aborted by user")
+                play_completion_sound()
+                return 1
+            print()
+        else:
+            print("✓ No uncommitted changes in module(s)\n")
 
     print("=" * 70 + "\n")
 
@@ -1973,6 +1997,11 @@ async def main_updater_async() -> int:
         metavar="CMD",
         help='Override validation command (default: "make precommit")',
     )
+    parser.add_argument(
+        "--no-git",
+        action="store_true",
+        help="Skip all git operations (for environments without .git access, e.g. dark-factory hideGit)",
+    )
 
     subparsers = parser.add_subparsers(dest="subcommand", metavar="SUBCOMMAND")
 
@@ -2006,7 +2035,13 @@ async def main_updater_async() -> int:
     config.REQUIRE_CONFIRM = args.require_commit_confirm
     config.YES_MODE = args.yes
     config.CHECK_COMMAND = args.check_command
+    config.NO_GIT = args.no_git
     config.RUN_TIMESTAMP = datetime.now().strftime("%Y-%m-%d-%H%M%S")
+
+    # Auto-detect: if --no-git not explicit, check if git is available
+    if not config.NO_GIT and not is_git_available(Path.cwd()):
+        print("⚠ Git not available, enabling --no-git mode automatically\n")
+        config.NO_GIT = True
 
     if args.subcommand == "go":
         return await _run_go_modules(args.modules, project_type="go", update_deps=True)

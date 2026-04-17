@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## v0.22.0
+
+- feat: Add `--no-git` mode to skip all git operations in environments without `.git` access (e.g. dark-factory hideGit containers)
+- feat: Auto-detect missing git and enable `--no-git` mode automatically
+- Add `is_git_available()` helper to `git_operations.py`
+- Guard all git-dependent pipeline steps (`GitSyncStep`, `CheckChangesStep`, `ChangelogStep`, `GitCommitStep`, `GitPushStep`, `CommitUncommittedStep`, `ReleaseStep`, `DockerCommitStep`) with `config.NO_GIT` checks
+
 ## v0.21.0
 
 - feat: Add `CommitUncommittedStep` to `updater release` pipeline so manually edited files are committed before the release check, preventing silent "Nothing to release" when uncommitted changes exist

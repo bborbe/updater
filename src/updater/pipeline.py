@@ -218,6 +218,19 @@ class CheckChangesStep(Step):
         self._phase = phase
 
     async def run(self, module_path: Path, context: dict[str, Any]) -> StepResult:
+        if config.NO_GIT:
+            # Without git, assume changes were made if update steps reported changes
+            updates_made = context.get("updates_made", False)
+            if not updates_made:
+                log_message(
+                    "\n✓ No updates were made (--no-git mode)", to_console=True
+                )
+                return StepResult(StepStatus.UP_TO_DATE)
+            context["change_count"] = 1
+            context["files"] = []
+            log_message("→ Skipping git status check (--no-git mode)", to_console=True)
+            return StepResult(StepStatus.SUCCESS)
+
         change_count, files = check_git_status(module_path)
         context["change_count"] = change_count
         context["files"] = files
@@ -295,6 +308,16 @@ class ChangelogStep(Step):
 
     async def run(self, module_path: Path, context: dict[str, Any]) -> StepResult:
         from .cli import print_commit_summary
+
+        if config.NO_GIT:
+            log_message("→ Skipping changelog analysis (--no-git mode)", to_console=True)
+            context["analysis"] = {
+                "version_bump": "patch",
+                "changelog": ["update dependencies"],
+                "commit_message": "update dependencies",
+            }
+            context["no_tag"] = True
+            return StepResult(StepStatus.SUCCESS)
 
         module_config: ModuleConfig = context.get("module_config", ModuleConfig())
         if is_disabled(module_config, "llm-analysis"):
@@ -376,6 +399,9 @@ class GitSyncStep(Step):
     """Sync repo with origin/master before updating."""
 
     async def run(self, module_path: Path, context: dict[str, Any]) -> StepResult:
+        if config.NO_GIT:
+            log_message("→ Skipping git sync (--no-git mode)", to_console=True)
+            return StepResult(StepStatus.SUCCESS)
         log_message("=== Phase 0: Sync with origin/master ===", to_console=True)
         success = update_git_branch(module_path, log_func=log_message)
         if not success:
@@ -387,6 +413,8 @@ class GitConfirmStep(Step):
     """Prompt user for confirmation if --require-commit-confirm is set."""
 
     async def run(self, module_path: Path, context: dict[str, Any]) -> StepResult:
+        if config.NO_GIT:
+            return StepResult(StepStatus.SUCCESS)
         if not config.REQUIRE_CONFIRM:
             return StepResult(StepStatus.SUCCESS)
 
@@ -407,6 +435,9 @@ class GitCommitStep(Step):
     """Commit changes and optionally tag."""
 
     async def run(self, module_path: Path, context: dict[str, Any]) -> StepResult:
+        if config.NO_GIT:
+            log_message("\n✓ Files updated (--no-git mode, skipping commit)", to_console=True)
+            return StepResult(StepStatus.SUCCESS)
         tag_only = context.get("tag_only", False)
 
         if not tag_only:
@@ -436,6 +467,9 @@ class GitPushStep(Step):
     """Push commits and tags to remote."""
 
     async def run(self, module_path: Path, context: dict[str, Any]) -> StepResult:
+        if config.NO_GIT:
+            log_message("→ Skipping push (--no-git mode)", to_console=True)
+            return StepResult(StepStatus.SUCCESS)
         git_push(module_path, log_func=log_message)
         return StepResult(StepStatus.SUCCESS)
 
@@ -453,6 +487,8 @@ class CommitUncommittedStep(Step):
     """
 
     async def run(self, module_path: Path, context: dict[str, Any]) -> StepResult:
+        if config.NO_GIT:
+            return StepResult(StepStatus.UP_TO_DATE)
         result = run_command(
             "git status --porcelain", cwd=module_path, quiet=True, log_func=log_message
         )
@@ -542,6 +578,10 @@ class ReleaseStep(Step):
         return match.group(1) if match else None
 
     async def run(self, module_path: Path, context: dict[str, Any]) -> StepResult:
+        if config.NO_GIT:
+            log_message("→ Skipping release (--no-git mode)", to_console=True)
+            return StepResult(StepStatus.UP_TO_DATE)
+
         from .claude_analyzer import generate_changelog_from_commits
         from .git_operations import get_commits_since_tag, get_latest_tag
 
@@ -675,6 +715,9 @@ class DockerCommitStep(Step):
     """Commit Docker image updates."""
 
     async def run(self, module_path: Path, context: dict[str, Any]) -> StepResult:
+        if config.NO_GIT:
+            log_message("→ Skipping Docker commit (--no-git mode)", to_console=True)
+            return StepResult(StepStatus.SUCCESS)
         updates = context.get("docker_updates", [])
         if not updates:
             return StepResult(StepStatus.UP_TO_DATE)

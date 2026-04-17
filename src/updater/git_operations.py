@@ -7,6 +7,26 @@ from pathlib import Path
 from . import config
 
 
+def is_git_available(path: Path) -> bool:
+    """Check if git is functional at the given path.
+
+    Tries to run 'git rev-parse --show-toplevel'. Returns False if git
+    is not installed or the path is not inside a working git repository
+    (e.g. when .git is hidden by dark-factory hideGit).
+    """
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--show-toplevel"],
+            cwd=path,
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        return result.returncode == 0
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+        return False
+
+
 def find_git_repo(path: Path) -> Path | None:
     """Find the git repository root by walking UP from the given path.
 
