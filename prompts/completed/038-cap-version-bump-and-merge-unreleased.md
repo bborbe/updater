@@ -1,11 +1,12 @@
 ---
-status: committing
+status: completed
 summary: Capped version bumps at MINOR in claude_analyzer.py prompts with defensive guards, added drain_unreleased_section to changelog.py, updated ChangelogStep to merge and drain pre-existing Unreleased entries, updated all tests and docs/version-bumping.md
 container: updater-038-cap-version-bump-and-merge-unreleased
 dark-factory-version: v0.128.1-3-gf1cfca3-dirty
 created: "2026-04-19"
 queued: "2026-04-19T20:40:01Z"
 started: "2026-04-19T20:40:07Z"
+completed: "2026-04-19T20:46:00Z"
 ---
 
 <summary>
