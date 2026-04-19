@@ -158,6 +158,62 @@ def bump_version(major: int, minor: int, patch: int, bump_type: str) -> str:
     return f"v{major}.{minor}.{patch}"
 
 
+def drain_unreleased_section(changelog_path: Path) -> None:
+    """Remove the ## Unreleased section (header + all bullets) from CHANGELOG.md.
+
+    Removes any ## <Title> that's not a version (not matching ## vX.Y.Z), along
+    with all bullet lines following it until the next ## section. Used after
+    merging unreleased entries into a new version section.
+
+    No-op if the file doesn't exist or there is no unreleased section.
+
+    Args:
+        changelog_path: Path to CHANGELOG.md
+    """
+    if not changelog_path.exists():
+        return
+
+    with open(changelog_path) as f:
+        lines = f.readlines()
+
+    version_pattern = re.compile(r"^##\s+v\d+\.\d+\.\d+")
+
+    # Find the first non-version ## header
+    unreleased_idx = None
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        if stripped.startswith("## "):
+            if not version_pattern.match(stripped):
+                unreleased_idx = i
+                break
+
+    if unreleased_idx is None:
+        return
+
+    # Find the next ## section (exclusive boundary)
+    next_section_idx = len(lines)
+    for i in range(unreleased_idx + 1, len(lines)):
+        if lines[i].strip().startswith("## "):
+            next_section_idx = i
+            break
+
+    # Remove the unreleased header and its content
+    new_lines = lines[:unreleased_idx] + lines[next_section_idx:]
+
+    # Collapse consecutive blank lines to a single blank line
+    collapsed: list[str] = []
+    prev_blank = False
+    for line in new_lines:
+        is_blank = line.strip() == ""
+        if is_blank and prev_blank:
+            continue
+        collapsed.append(line)
+        prev_blank = is_blank
+
+    with open(changelog_path, "w") as f:
+        f.writelines(collapsed)
+
+
 def add_to_unreleased(
     module_path: Path, analysis: dict[str, Any], log_func: Callable[..., None]
 ) -> None:

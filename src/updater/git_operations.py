@@ -23,7 +23,7 @@ def is_git_available(path: Path) -> bool:
             timeout=5,
         )
         return result.returncode == 0
-    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+    except subprocess.TimeoutExpired, FileNotFoundError, OSError:
         return False
 
 

@@ -2,7 +2,10 @@
 
 from unittest.mock import AsyncMock, patch
 
+import pytest
+
 from updater.pipeline import (
+    ChangelogStep,
     CheckChangesStep,
     DockerCommitStep,
     DockerUpdateStep,
@@ -655,3 +658,131 @@ async def test_git_commit_step_tag_only(tmp_path):
         assert result.status == StepStatus.SUCCESS
         mock_commit.assert_not_called()
         mock_tag.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# ChangelogStep — merge existing unreleased entries
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_changelog_step_merges_existing_unreleased(tmp_path):
+    """Test ChangelogStep reads existing unreleased entries and drains them after merge."""
+    changelog = tmp_path / "CHANGELOG.md"
+    changelog.write_text("# Changelog\n\n## Unreleased\n\n- old bullet\n\n## v1.0.0\n\n- Init\n")
+
+    mock_analysis = {
+        "version_bump": "minor",
+        "changelog": ["merged bullet 1", "merged bullet 2"],
+        "commit_message": "test",
+    }
+
+    with (
+        patch(
+            "updater.pipeline.analyze_changes_with_claude",
+            new_callable=AsyncMock,
+            return_value=mock_analysis,
+        ) as mock_claude,
+        patch("updater.pipeline.config") as mock_config,
+        patch("updater.pipeline.log_message"),
+        patch("updater.cli.print_commit_summary"),
+    ):
+        mock_config.NO_GIT = False
+        mock_config.NO_TAG = False
+        mock_config.VERBOSE_MODE = False
+
+        step = ChangelogStep()
+        ctx = {}
+        result = await step.run(tmp_path, ctx)
+
+    assert result.status == StepStatus.SUCCESS
+    assert ctx["new_version"] == "v1.1.0"
+
+    # Claude was called with existing_unreleased containing old bullet
+    call_kwargs = mock_claude.call_args
+    assert call_kwargs.kwargs.get("existing_unreleased") == ["- old bullet"]
+
+    # ## Unreleased section should have been drained
+    content = changelog.read_text()
+    assert "## Unreleased" not in content
+    assert "## v1.1.0" in content
+    assert "- merged bullet 1" in content
+
+
+@pytest.mark.asyncio
+async def test_changelog_step_no_unreleased_works_as_before(tmp_path):
+    """Test ChangelogStep with no existing Unreleased section passes None to Claude."""
+    changelog = tmp_path / "CHANGELOG.md"
+    changelog.write_text("# Changelog\n\n## v1.0.0\n\n- Init\n")
+
+    mock_analysis = {
+        "version_bump": "patch",
+        "changelog": ["update deps"],
+        "commit_message": "update deps",
+    }
+
+    with (
+        patch(
+            "updater.pipeline.analyze_changes_with_claude",
+            new_callable=AsyncMock,
+            return_value=mock_analysis,
+        ) as mock_claude,
+        patch("updater.pipeline.config") as mock_config,
+        patch("updater.pipeline.log_message"),
+        patch("updater.cli.print_commit_summary"),
+    ):
+        mock_config.NO_GIT = False
+        mock_config.NO_TAG = False
+        mock_config.VERBOSE_MODE = False
+
+        step = ChangelogStep()
+        ctx = {}
+        result = await step.run(tmp_path, ctx)
+
+    assert result.status == StepStatus.SUCCESS
+    assert ctx["new_version"] == "v1.0.1"
+
+    # Claude called with existing_unreleased=None (no pre-existing unreleased section)
+    call_kwargs = mock_claude.call_args
+    assert call_kwargs.kwargs.get("existing_unreleased") is None
+
+    # CHANGELOG should not have an Unreleased section
+    content = changelog.read_text()
+    assert "## Unreleased" not in content
+    assert "## v1.0.1" in content
+
+
+@pytest.mark.asyncio
+async def test_changelog_step_llm_disabled_preserves_unreleased(tmp_path):
+    """Test ChangelogStep with llm-analysis disabled does NOT drain ## Unreleased."""
+    from updater.module_config import ModuleConfig
+
+    changelog = tmp_path / "CHANGELOG.md"
+    changelog.write_text("# Changelog\n\n## Unreleased\n\n- keep me\n\n## v1.0.0\n\n- Init\n")
+
+    module_config = ModuleConfig(disable=["llm-analysis"])
+
+    with (
+        patch(
+            "updater.pipeline.analyze_changes_with_claude",
+            new_callable=AsyncMock,
+        ) as mock_claude,
+        patch("updater.pipeline.config") as mock_config,
+        patch("updater.pipeline.log_message"),
+        patch("updater.cli.print_commit_summary"),
+    ):
+        mock_config.NO_GIT = False
+        mock_config.NO_TAG = False
+        mock_config.VERBOSE_MODE = False
+
+        step = ChangelogStep()
+        ctx = {"module_config": module_config}
+        await step.run(tmp_path, ctx)
+
+    # Claude should NOT have been called
+    mock_claude.assert_not_called()
+
+    # ## Unreleased section must still be present (not drained)
+    content = changelog.read_text()
+    assert "## Unreleased" in content
+    assert "- keep me" in content

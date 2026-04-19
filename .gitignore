@@ -51,6 +51,7 @@ env/
 
 # Dark Factory
 /.dark-factory.lock
+/.dark-factory.log
 /prompts/log
 /specs/log
 /.coverage

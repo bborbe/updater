@@ -107,8 +107,8 @@ class TestAnalyzeChangesWithClaude:
         assert len(result["changelog"]) == 2
 
     @pytest.mark.asyncio
-    async def test_successful_analysis_major(self, mock_module_path, reset_config):
-        """Test successful Claude analysis for major version."""
+    async def test_major_coerced_to_minor(self, mock_module_path, reset_config):
+        """Test that Claude returning 'major' is capped to 'minor' by the defensive guard."""
         mock_response = {
             "version_bump": "major",
             "changelog": ["breaking: remove deprecated API", "refactor core logic"],
@@ -122,7 +122,62 @@ class TestAnalyzeChangesWithClaude:
             mock_run.return_value = json.dumps(mock_response)
             result = await analyze_changes_with_claude(mock_module_path)
 
-        assert result["version_bump"] == "major"
+        assert result["version_bump"] == "minor"
+
+    @pytest.mark.asyncio
+    async def test_analyze_with_existing_unreleased(self, mock_module_path, reset_config):
+        """Test that existing unreleased entries are injected into the Claude prompt."""
+        mock_response = {
+            "version_bump": "minor",
+            "changelog": ["old bullet", "new feature from diff"],
+            "commit_message": "merge unreleased and new changes",
+        }
+
+        captured_prompt: list[str] = []
+
+        async def capture_run(prompt, **kwargs):
+            captured_prompt.append(prompt)
+            return json.dumps(mock_response)
+
+        with (
+            patch("updater.claude_analyzer._run_claude", side_effect=capture_run),
+            patch("asyncio.sleep", new_callable=AsyncMock),
+        ):
+            result = await analyze_changes_with_claude(
+                mock_module_path, existing_unreleased=["- old bullet"]
+            )
+
+        assert len(captured_prompt) == 1
+        assert "old bullet" in captured_prompt[0]
+        assert "MUST be merged" in captured_prompt[0]
+        assert result["version_bump"] == "minor"
+        assert "old bullet" in result["changelog"]
+
+    @pytest.mark.asyncio
+    async def test_analyze_with_no_existing_unreleased_unchanged_prompt(
+        self, mock_module_path, reset_config
+    ):
+        """Test that None existing_unreleased does not inject the merge block."""
+        mock_response = {
+            "version_bump": "patch",
+            "changelog": ["update deps"],
+            "commit_message": "update deps",
+        }
+
+        captured_prompt: list[str] = []
+
+        async def capture_run(prompt, **kwargs):
+            captured_prompt.append(prompt)
+            return json.dumps(mock_response)
+
+        with (
+            patch("updater.claude_analyzer._run_claude", side_effect=capture_run),
+            patch("asyncio.sleep", new_callable=AsyncMock),
+        ):
+            result = await analyze_changes_with_claude(mock_module_path, existing_unreleased=None)
+
+        assert "MUST be merged" not in captured_prompt[0]
+        assert result["version_bump"] == "patch"
 
     @pytest.mark.asyncio
     async def test_successful_analysis_none(self, mock_module_path, reset_config):
@@ -516,6 +571,23 @@ class TestAnalyzeUnreleasedForRelease:
             pytest.raises(ClaudeError),
         ):
             await analyze_unreleased_for_release(["Fix bug"], "test-module")
+
+    @pytest.mark.asyncio
+    async def test_analyze_unreleased_for_release_major_coerced(self, reset_config):
+        """Test that Claude returning 'major' is capped to 'minor' by the defensive guard."""
+        response = json.dumps({"version_bump": "major"})
+        mock_log = Mock()
+
+        with (
+            patch("updater.claude_analyzer._run_claude", new_callable=AsyncMock) as mock_run,
+            patch("asyncio.sleep", new_callable=AsyncMock),
+        ):
+            mock_run.return_value = response
+            result = await analyze_unreleased_for_release(
+                ["breaking: remove API"], "test-module", log_func=mock_log
+            )
+
+        assert result["version_bump"] == "minor"
 
 
 class TestGenerateChangelogFromCommits:

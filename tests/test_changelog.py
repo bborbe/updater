@@ -5,6 +5,7 @@ import pytest
 from updater.changelog import (
     add_to_unreleased,
     bump_version,
+    drain_unreleased_section,
     extract_current_version,
     get_unreleased_entries,
     promote_unreleased_to_version,
@@ -467,3 +468,57 @@ def test_update_changelog_with_suggestions_file_content_format(tmp_path):
     assert "- Fix typo" in content
     assert "- Add docs" in content
     assert "-- " not in content
+
+
+# ---------------------------------------------------------------------------
+# drain_unreleased_section
+# ---------------------------------------------------------------------------
+
+
+def test_drain_unreleased_removes_header_and_bullets(tmp_path):
+    """Test drain_unreleased_section removes ## Unreleased header and its bullets."""
+    changelog_path = tmp_path / "CHANGELOG.md"
+    changelog_path.write_text(
+        "# Changelog\n\n## Unreleased\n\n- bullet 1\n- bullet 2\n\n## v1.2.3\n\n- old\n"
+    )
+
+    drain_unreleased_section(changelog_path)
+
+    content = changelog_path.read_text()
+    assert "## Unreleased" not in content
+    assert "- bullet 1" not in content
+    assert "- bullet 2" not in content
+    assert "## v1.2.3" in content
+    assert "- old" in content
+
+
+def test_drain_unreleased_no_section_noop(tmp_path):
+    """Test drain_unreleased_section is a no-op when only version sections exist."""
+    original = "# Changelog\n\n## v1.0.0\n\n- Init\n"
+    changelog_path = tmp_path / "CHANGELOG.md"
+    changelog_path.write_text(original)
+
+    drain_unreleased_section(changelog_path)
+
+    assert changelog_path.read_text() == original
+
+
+def test_drain_unreleased_missing_file_noop(tmp_path):
+    """Test drain_unreleased_section does not raise when file does not exist."""
+    changelog_path = tmp_path / "CHANGELOG.md"
+    drain_unreleased_section(changelog_path)  # Should not raise
+
+
+def test_drain_unreleased_custom_header(tmp_path):
+    """Test drain_unreleased_section removes a non-standard header (e.g. ## Banana)."""
+    changelog_path = tmp_path / "CHANGELOG.md"
+    changelog_path.write_text(
+        "# Changelog\n\n## Banana\n\n- wip feature\n\n## v2.0.0\n\n- stable\n"
+    )
+
+    drain_unreleased_section(changelog_path)
+
+    content = changelog_path.read_text()
+    assert "## Banana" not in content
+    assert "- wip feature" not in content
+    assert "## v2.0.0" in content

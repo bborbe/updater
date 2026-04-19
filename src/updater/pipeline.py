@@ -222,9 +222,7 @@ class CheckChangesStep(Step):
             # Without git, assume changes were made if update steps reported changes
             updates_made = context.get("updates_made", False)
             if not updates_made:
-                log_message(
-                    "\n✓ No updates were made (--no-git mode)", to_console=True
-                )
+                log_message("\n✓ No updates were made (--no-git mode)", to_console=True)
                 return StepResult(StepStatus.UP_TO_DATE)
             context["change_count"] = 1
             context["files"] = []
@@ -319,7 +317,11 @@ class ChangelogStep(Step):
             context["no_tag"] = True
             return StepResult(StepStatus.SUCCESS)
 
+        from .changelog import get_unreleased_entries
+
         module_config: ModuleConfig = context.get("module_config", ModuleConfig())
+        changelog_path = module_path / "CHANGELOG.md"
+
         if is_disabled(module_config, "llm-analysis"):
             log_message("  → Skipping LLM analysis (disabled by config)", to_console=True)
             context["analysis"] = {
@@ -328,12 +330,19 @@ class ChangelogStep(Step):
                 "commit_message": "update dependencies",
             }
             analysis = context["analysis"]
+            existing_unreleased = None
         else:
-            # Analyze changes with Claude
-            analysis = await analyze_changes_with_claude(module_path, log_func=log_message)
+            # Read existing unreleased entries before calling Claude
+            existing_unreleased = (
+                get_unreleased_entries(changelog_path) if changelog_path.exists() else None
+            )
+            # Analyze changes with Claude, merging any existing unreleased bullets
+            analysis = await analyze_changes_with_claude(
+                module_path,
+                existing_unreleased=existing_unreleased,
+                log_func=log_message,
+            )
             context["analysis"] = analysis
-
-        changelog_path = module_path / "CHANGELOG.md"
 
         # Case 1: No version bump needed
         if analysis["version_bump"] == "none":
@@ -385,6 +394,12 @@ class ChangelogStep(Step):
 
         # Case 4: Normal — update changelog and create version
         new_version = update_changelog_with_suggestions(module_path, analysis, log_func=log_message)
+        # Drain any pre-existing ## Unreleased section now that its bullets
+        # have been merged into the new version section by Claude.
+        if existing_unreleased:
+            from .changelog import drain_unreleased_section
+
+            drain_unreleased_section(changelog_path)
         context["new_version"] = new_version
         print_commit_summary(module_path.name, analysis, new_version=new_version)
         return StepResult(StepStatus.SUCCESS)

@@ -252,7 +252,9 @@ async def _verify_claude_auth_impl() -> tuple[bool, str]:
 
 
 async def analyze_changes_with_claude(
-    module_path: Path, log_func: Callable[..., None] = log_message
+    module_path: Path,
+    existing_unreleased: list[str] | None = None,
+    log_func: Callable[..., None] = log_message,
 ) -> dict[str, Any]:
     """Ask Claude to analyze changes and suggest version bump + changelog bullets.
 
@@ -261,6 +263,7 @@ async def analyze_changes_with_claude(
 
     Args:
         module_path: Path to the module
+        existing_unreleased: Existing ## Unreleased bullet strings to merge into output
         log_func: Logging function to use
 
     Returns:
@@ -272,6 +275,18 @@ async def analyze_changes_with_claude(
     log_func("\n=== Phase 3: Analyze Changes with Claude ===", to_console=True)
     log_func("→ Analyzing changes...", to_console=config.VERBOSE_MODE)
 
+    unreleased_block = ""
+    if existing_unreleased:
+        bullets = "\n".join(existing_unreleased)
+        unreleased_block = f"""
+Existing ## Unreleased entries (MUST be merged into your output):
+{bullets}
+
+Merge these with changes from the git diff. Deduplicate. Produce a single
+combined list of changelog bullets covering BOTH the existing unreleased
+entries AND the new git diff changes.
+"""
+
     prompt = f"""You are in {module_path}. Analyze the git changes in this module and determine the appropriate version bump.
 
 Steps:
@@ -279,18 +294,21 @@ Steps:
 2. Run git diff against that tag to see what changed (exclude go.sum, vendor/, node_modules/, mocks/, *_mock.go, *.gen.go)
 3. Focus on go.mod for dependency changes and source code for logic changes
 4. Determine version bump and generate changelog
-
+{unreleased_block}
 Version Bump Decision Rules:
 1. **DEPENDENCY CHANGES = AT LEAST PATCH**
    - If go.mod, go.sum, package.json, pyproject.toml, or Dockerfile have version updates → PATCH minimum
+   - Dependency updates are ALWAYS patch or minor — NEVER major
 
 2. **CODE CHANGES:**
-   - **MAJOR**: Breaking API changes
-   - **MINOR**: New features (backwards-compatible)
+   - **MINOR**: New features OR breaking API changes (backwards-compatible OR not)
    - **PATCH**: Bug fixes or small improvements
 
 3. **NONE**: ONLY when there are ZERO dependency updates AND ZERO code changes
    - Examples: .gitignore, README.md, Makefile, docs/
+
+CRITICAL: NEVER return "major". This tool caps version bumps at minor.
+If you detect breaking changes, return "minor" — never "major".
 
 Task:
 1. Determine version bump based on the changes
@@ -298,7 +316,7 @@ Task:
 3. Suggest a brief commit message (max 50 chars)
 
 Return ONLY this JSON format (no markdown, no code blocks):
-{{"version_bump": "patch|minor|major|none", "changelog": ["bullet 1", "bullet 2"], "commit_message": "short message"}}"""
+{{"version_bump": "patch|minor|none", "changelog": ["bullet 1", "bullet 2"], "commit_message": "short message"}}"""
 
     # Retry logic for timeout errors
     max_retries = 3
@@ -313,6 +331,14 @@ Return ONLY this JSON format (no markdown, no code blocks):
 
             # Parse JSON response
             analysis = _extract_json_from_response(response_text)
+
+            # Defensive guard: cap major at minor (updater never bumps major)
+            if analysis.get("version_bump") == "major":
+                log_func(
+                    "⚠ Claude returned 'major' — capping to 'minor' (updater never bumps major)",
+                    to_console=True,
+                )
+                analysis["version_bump"] = "minor"
 
             metrics.record_call(
                 "analyze_changes", time.monotonic() - call_start, success=True, rate_limited=False
@@ -400,17 +426,15 @@ Unreleased entries:
 
 Version Bump Rules (Semantic Versioning):
 
-**MAJOR** - Breaking changes that require user action:
-- Removed/renamed public APIs, functions, or CLI flags
-- Changed behavior that breaks existing usage
-- Incompatible configuration changes
-
-**MINOR** - New functionality (backwards-compatible):
+**MINOR** - New functionality OR breaking changes:
 - New features, commands, endpoints, or modes
 - New CLI flags or configuration options
 - New public APIs or functions
 - Significant capability additions
-- Keywords: "add", "new", "support", "implement", "introduce"
+- Removed/renamed public APIs, functions, or CLI flags
+- Changed behavior that breaks existing usage
+- Breaking API changes are also MINOR — this tool never bumps major.
+- Keywords: "add", "new", "support", "implement", "introduce", "breaking", "remove"
 
 **PATCH** - Bug fixes and maintenance:
 - Bug fixes
@@ -420,12 +444,14 @@ Version Bump Rules (Semantic Versioning):
 - Performance improvements (no new features)
 - Refactoring (no behavior change)
 
-IMPORTANT: Lean toward MINOR if any entry adds NEW functionality, even if mixed with patches.
+IMPORTANT: Lean toward MINOR if any entry adds NEW functionality or breaks an API, even if mixed with patches.
 Example: "Add REST server mode" + "Update README" = MINOR (new feature present)
+
+CRITICAL: NEVER return "major". This tool caps version bumps at minor.
 
 Return ONLY this JSON format (no markdown, no code blocks):
 {{
-  "version_bump": "patch|minor|major"
+  "version_bump": "patch|minor"
 }}"""
 
     max_retries = 3
@@ -440,6 +466,14 @@ Return ONLY this JSON format (no markdown, no code blocks):
 
             # Parse JSON response
             analysis = _extract_json_from_response(response_text)
+
+            # Defensive guard: cap major at minor (updater never bumps major)
+            if analysis.get("version_bump") == "major":
+                log_func(
+                    "⚠ Claude returned 'major' — capping to 'minor' (updater never bumps major)",
+                    to_console=True,
+                )
+                analysis["version_bump"] = "minor"
 
             version_bump = analysis.get("version_bump", "patch")
             metrics.record_call(

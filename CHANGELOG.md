@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## v0.23.0
+
+- feat: Cap version bumps at MINOR — updater never bumps MAJOR; breaking API changes are classified as MINOR
+- feat: Merge existing `## Unreleased` CHANGELOG bullets into new version section on release, then drain the Unreleased header to prevent orphaned entries
+- fix: `analyze_unreleased_for_release` no longer returns "major" — defensive guard coerces to "minor"
+- refactor: Add `drain_unreleased_section` helper to `changelog.py` for removing unreleased header after merge
+- refactor: `ChangelogStep` reads pre-existing unreleased entries and passes them to Claude via new `existing_unreleased` parameter on `analyze_changes_with_claude`
+- docs: Update `docs/version-bumping.md` — remove MAJOR row, cap breaking changes at MINOR
+
 ## v0.22.0
 
 - feat: Add `--no-git` mode to skip all git operations in environments without `.git` access (e.g. dark-factory hideGit containers)
