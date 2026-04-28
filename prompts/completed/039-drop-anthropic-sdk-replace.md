@@ -1,11 +1,12 @@
 ---
-status: committing
+status: completed
 summary: Removed anthropic-sdk-go v1.26.0 pin from STANDARD_REPLACES, added it to OBSOLETE_REPLACES, updated five tests, added new test for obsolete-replace cleanup, and added CHANGELOG Unreleased entry.
 container: updater-039-drop-anthropic-sdk-replace
 dark-factory-version: v0.135.19-1-gc08c946
 created: "2026-04-28T14:53:22Z"
 queued: "2026-04-28T14:53:22Z"
 started: "2026-04-28T14:53:40Z"
+completed: "2026-04-28T14:55:41Z"
 ---
 
 <summary>
