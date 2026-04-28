@@ -15,8 +15,6 @@ STANDARD_EXCLUDES: list[str] = []
 # Note: go.mod stores as "new_module version" (space-separated)
 # NOTE: Replaces break `go install`, so keep this list empty unless absolutely necessary.
 STANDARD_REPLACES: list[tuple[str, str]] = [
-    # gosec v2.25.0 autofix uses ModelClaude3_7SonnetLatest removed in v1.27.0
-    ("github.com/anthropics/anthropic-sdk-go", "github.com/anthropics/anthropic-sdk-go v1.26.0"),
     # cellbuf v0.0.13 API break with ansi v0.11.6+
     ("github.com/charmbracelet/x/cellbuf", "github.com/charmbracelet/x/cellbuf v0.0.15"),
     # go-header v1.0.0 breaks golangci-lint v2 (API incompatibility)
@@ -46,6 +44,7 @@ OBSOLETE_EXCLUDES_PREFIXES = [
 
 # Replace module names whose directives should be REMOVED from projects (obsolete workarounds)
 OBSOLETE_REPLACES = [
+    "github.com/anthropics/anthropic-sdk-go",
     "k8s.io/kube-openapi",
 ]
 

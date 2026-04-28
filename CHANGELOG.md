@@ -2,6 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
+## v0.23.1
+
+- fix: Drop `anthropic-sdk-go` v1.26.0 replace pin from STANDARD_REPLACES and mark it obsolete so existing projects get the stale replace stripped automatically
+
 ## v0.23.0
 
 - feat: Cap version bumps at MINOR — updater never bumps MAJOR; breaking API changes are classified as MINOR

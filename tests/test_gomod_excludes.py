@@ -151,9 +151,8 @@ def test_apply_excludes_to_empty_gomod(tmp_path, mocker):
     result = apply_gomod_excludes_and_replaces(tmp_path)
 
     assert result is True  # Standard replaces added
-    assert mock_run.call_count == 6  # 5 replace calls + 1 go mod download
+    assert mock_run.call_count == 5  # 4 replace calls + 1 go mod download
     calls = [str(c) for c in mock_run.call_args_list]
-    assert any("anthropic-sdk-go" in c for c in calls)
     assert any("go-header" in c for c in calls)
     assert any("go-diskfs" in c for c in calls)
     assert any("ginkgolinter" in c for c in calls)
@@ -168,7 +167,6 @@ def test_apply_excludes_idempotent(tmp_path, mocker):
 go 1.23
 
 replace (
-    github.com/anthropics/anthropic-sdk-go => github.com/anthropics/anthropic-sdk-go v1.26.0
     github.com/charmbracelet/x/cellbuf => github.com/charmbracelet/x/cellbuf v0.0.15
     github.com/denis-tingaikin/go-header => github.com/denis-tingaikin/go-header v0.5.0
     github.com/diskfs/go-diskfs => github.com/diskfs/go-diskfs v1.7.0
@@ -212,7 +210,7 @@ exclude (
     result = apply_gomod_excludes_and_replaces(tmp_path)
 
     assert result is True  # Changes made — obsolete excludes removed + standard replaces added
-    assert mock_run.call_count == 15  # 9 dropexclude + 5 replace calls + 1 go mod download
+    assert mock_run.call_count == 14  # 9 dropexclude + 4 replace calls + 1 go mod download
 
 
 def test_apply_excludes_removes_obsolete_k8s_entries(tmp_path, mocker):
@@ -277,7 +275,6 @@ def test_apply_excludes_does_not_call_go_mod_download_when_no_changes(tmp_path, 
 go 1.23
 
 replace (
-    github.com/anthropics/anthropic-sdk-go => github.com/anthropics/anthropic-sdk-go v1.26.0
     github.com/charmbracelet/x/cellbuf => github.com/charmbracelet/x/cellbuf v0.0.15
     github.com/denis-tingaikin/go-header => github.com/denis-tingaikin/go-header v0.5.0
     github.com/diskfs/go-diskfs => github.com/diskfs/go-diskfs v1.7.0
@@ -293,3 +290,27 @@ replace (
     assert result is False
     calls = [str(c) for c in mock_run.call_args_list]
     assert not any("go mod download" in c for c in calls)
+
+
+def test_apply_excludes_removes_obsolete_anthropic_replace(tmp_path, mocker):
+    """Test that stale anthropic-sdk-go replace pin is actively dropped."""
+    gomod = tmp_path / "go.mod"
+    content = """module example.com/test
+
+go 1.23
+
+replace (
+    github.com/anthropics/anthropic-sdk-go => github.com/anthropics/anthropic-sdk-go v1.26.0
+)
+"""
+    gomod.write_text(content)
+
+    mock_run = mocker.patch("updater.gomod_excludes.run_command")
+
+    result = apply_gomod_excludes_and_replaces(tmp_path)
+
+    assert result is True
+    calls = [str(c) for c in mock_run.call_args_list]
+    assert any("dropreplace" in c and "anthropic-sdk-go" in c for c in calls)
+    assert any("cellbuf" in c for c in calls)
+    assert any("go-header" in c for c in calls)
