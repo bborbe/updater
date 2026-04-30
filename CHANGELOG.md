@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## v0.23.2
+
+- feat: Empty `STANDARD_REPLACES` — the four tools.go-pollution workarounds (cellbuf, go-header, go-diskfs, ginkgolinter/types) are no longer auto-added since they break `go install` / `go run pkg@version`
+- feat: Add `TOOLS_GO_OBSOLETE_REPLACES` — when a project no longer has `tools.go` (migrated to `tools.env` + Makefile `@version` pattern), updater actively removes these four obsolete replaces
+- Un-migrated projects (with `tools.go`) keep their replaces unchanged so migration can proceed at a per-repo pace
+
 ## v0.23.1
 
 - fix: Drop `anthropic-sdk-go` v1.26.0 replace pin from STANDARD_REPLACES and mark it obsolete so existing projects get the stale replace stripped automatically

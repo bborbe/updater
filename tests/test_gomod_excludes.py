@@ -141,7 +141,7 @@ replace (
 
 
 def test_apply_excludes_to_empty_gomod(tmp_path, mocker):
-    """Test applying excludes to go.mod with no existing excludes."""
+    """Test applying excludes to empty go.mod is a no-op when STANDARD_REPLACES is empty."""
     gomod = tmp_path / "go.mod"
     gomod.write_text("module example.com/test\n\ngo 1.23\n")
 
@@ -150,17 +150,14 @@ def test_apply_excludes_to_empty_gomod(tmp_path, mocker):
 
     result = apply_gomod_excludes_and_replaces(tmp_path)
 
-    assert result is True  # Standard replaces added
-    assert mock_run.call_count == 5  # 4 replace calls + 1 go mod download
-    calls = [str(c) for c in mock_run.call_args_list]
-    assert any("go-header" in c for c in calls)
-    assert any("go-diskfs" in c for c in calls)
-    assert any("ginkgolinter" in c for c in calls)
-    assert any("go mod download" in c for c in calls)
+    assert result is False  # No standard replaces to add
+    assert mock_run.call_count == 0  # No commands run
 
 
 def test_apply_excludes_idempotent(tmp_path, mocker):
-    """Test that applying with all standard replaces present makes no changes."""
+    """Test that applying with all tools.go-era replaces present makes no changes
+    when tools.go exists (un-migrated project).
+    """
     gomod = tmp_path / "go.mod"
     content = """module example.com/test
 
@@ -174,6 +171,7 @@ replace (
 )
 """
     gomod.write_text(content)
+    (tmp_path / "tools.go").write_text("//go:build tools\npackage tools\n")
 
     # Mock run_command to avoid actual go mod edit calls
     mock_run = mocker.patch("updater.gomod_excludes.run_command")
@@ -209,8 +207,8 @@ exclude (
 
     result = apply_gomod_excludes_and_replaces(tmp_path)
 
-    assert result is True  # Changes made — obsolete excludes removed + standard replaces added
-    assert mock_run.call_count == 14  # 9 dropexclude + 4 replace calls + 1 go mod download
+    assert result is True  # Changes made — obsolete excludes removed
+    assert mock_run.call_count == 10  # 9 dropexclude + 1 go mod download
 
 
 def test_apply_excludes_removes_obsolete_k8s_entries(tmp_path, mocker):
@@ -256,7 +254,12 @@ def test_apply_excludes_missing_gomod(tmp_path):
 def test_apply_excludes_calls_go_mod_download_when_changes_made(tmp_path, mocker):
     """Test that go mod download is called when changes are made."""
     gomod = tmp_path / "go.mod"
-    gomod.write_text("module example.com/test\n\ngo 1.23\n")
+    # Use an obsolete replace to trigger changes (since STANDARD_REPLACES is empty)
+    gomod.write_text(
+        "module example.com/test\n\ngo 1.23\n\n"
+        "replace github.com/anthropics/anthropic-sdk-go => "
+        "github.com/anthropics/anthropic-sdk-go v1.26.0\n"
+    )
 
     mock_run = mocker.patch("updater.gomod_excludes.run_command")
 
@@ -268,7 +271,9 @@ def test_apply_excludes_calls_go_mod_download_when_changes_made(tmp_path, mocker
 
 
 def test_apply_excludes_does_not_call_go_mod_download_when_no_changes(tmp_path, mocker):
-    """Test that go mod download is NOT called when no changes are made."""
+    """Test that go mod download is NOT called when no changes are made
+    on an un-migrated project (tools.go present, replaces stay).
+    """
     gomod = tmp_path / "go.mod"
     content = """module example.com/test
 
@@ -282,6 +287,7 @@ replace (
 )
 """
     gomod.write_text(content)
+    (tmp_path / "tools.go").write_text("//go:build tools\npackage tools\n")
 
     mock_run = mocker.patch("updater.gomod_excludes.run_command")
 
@@ -312,5 +318,57 @@ replace (
     assert result is True
     calls = [str(c) for c in mock_run.call_args_list]
     assert any("dropreplace" in c and "anthropic-sdk-go" in c for c in calls)
-    assert any("cellbuf" in c for c in calls)
-    assert any("go-header" in c for c in calls)
+
+
+def test_tools_go_replaces_kept_when_tools_go_exists(tmp_path, mocker):
+    """Test that tools.go-related replaces are kept when tools.go is present."""
+    gomod = tmp_path / "go.mod"
+    content = """module example.com/test
+
+go 1.23
+
+replace (
+    github.com/charmbracelet/x/cellbuf => github.com/charmbracelet/x/cellbuf v0.0.15
+    github.com/denis-tingaikin/go-header => github.com/denis-tingaikin/go-header v0.5.0
+    github.com/diskfs/go-diskfs => github.com/diskfs/go-diskfs v1.7.0
+    github.com/nunnatsa/ginkgolinter/types => github.com/nunnatsa/ginkgolinter v0.19.1
+)
+"""
+    gomod.write_text(content)
+    (tmp_path / "tools.go").write_text("//go:build tools\npackage tools\n")
+
+    mock_run = mocker.patch("updater.gomod_excludes.run_command")
+
+    result = apply_gomod_excludes_and_replaces(tmp_path)
+
+    assert result is False  # No changes — tools.go present, replaces kept
+    assert mock_run.call_count == 0
+
+
+def test_tools_go_replaces_removed_when_tools_go_absent(tmp_path, mocker):
+    """Test that tools.go-related replaces are dropped when tools.go is absent."""
+    gomod = tmp_path / "go.mod"
+    content = """module example.com/test
+
+go 1.23
+
+replace (
+    github.com/charmbracelet/x/cellbuf => github.com/charmbracelet/x/cellbuf v0.0.15
+    github.com/denis-tingaikin/go-header => github.com/denis-tingaikin/go-header v0.5.0
+    github.com/diskfs/go-diskfs => github.com/diskfs/go-diskfs v1.7.0
+    github.com/nunnatsa/ginkgolinter/types => github.com/nunnatsa/ginkgolinter v0.19.1
+)
+"""
+    gomod.write_text(content)
+    # No tools.go — project has migrated
+
+    mock_run = mocker.patch("updater.gomod_excludes.run_command")
+
+    result = apply_gomod_excludes_and_replaces(tmp_path)
+
+    assert result is True  # 4 replaces removed
+    calls = [str(c) for c in mock_run.call_args_list]
+    assert any("dropreplace" in c and "cellbuf" in c for c in calls)
+    assert any("dropreplace" in c and "go-header" in c for c in calls)
+    assert any("dropreplace" in c and "go-diskfs" in c for c in calls)
+    assert any("dropreplace" in c and "ginkgolinter" in c for c in calls)

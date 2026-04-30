@@ -14,16 +14,11 @@ STANDARD_EXCLUDES: list[str] = []
 # Format: (old_module, "new_module version")
 # Note: go.mod stores as "new_module version" (space-separated)
 # NOTE: Replaces break `go install`, so keep this list empty unless absolutely necessary.
-STANDARD_REPLACES: list[tuple[str, str]] = [
-    # cellbuf v0.0.13 API break with ansi v0.11.6+
-    ("github.com/charmbracelet/x/cellbuf", "github.com/charmbracelet/x/cellbuf v0.0.15"),
-    # go-header v1.0.0 breaks golangci-lint v2 (API incompatibility)
-    ("github.com/denis-tingaikin/go-header", "github.com/denis-tingaikin/go-header v0.5.0"),
-    # osv-scalibr embeddedfs/common has os.FileInfo/fs.DirEntry mismatch with diskfs >= v1.8
-    ("github.com/diskfs/go-diskfs", "github.com/diskfs/go-diskfs v1.7.0"),
-    # upstream libs (s3-utils, service) leak pseudo-version for ginkgolinter/types
-    ("github.com/nunnatsa/ginkgolinter/types", "github.com/nunnatsa/ginkgolinter v0.19.1"),
-]
+# All previous entries (cellbuf, go-header, diskfs, ginkgolinter/types) were workarounds
+# for tools.go-induced transitive dep conflicts. After migrating tools.go → tools.env +
+# Makefile @version pattern, those replaces are no longer needed and actively hurt
+# because they prevent `go run pkg@version` from resolving cleanly.
+STANDARD_REPLACES: list[tuple[str, str]] = []
 
 # Exclude prefixes that should be REMOVED from projects (obsolete workarounds)
 # These broke `go install` for all modules. The updater actively removes them.
@@ -46,6 +41,17 @@ OBSOLETE_EXCLUDES_PREFIXES = [
 OBSOLETE_REPLACES = [
     "github.com/anthropics/anthropic-sdk-go",
     "k8s.io/kube-openapi",
+]
+
+# Replace module names that should be removed ONLY when the project has migrated
+# away from tools.go (i.e., tools.go does not exist). These were workarounds for
+# tools.go-induced transitive dep conflicts and are no longer needed once the
+# project moves to the tools.env + Makefile @version pattern.
+TOOLS_GO_OBSOLETE_REPLACES = [
+    "github.com/charmbracelet/x/cellbuf",
+    "github.com/denis-tingaikin/go-header",
+    "github.com/diskfs/go-diskfs",
+    "github.com/nunnatsa/ginkgolinter/types",
 ]
 
 
@@ -219,6 +225,25 @@ def apply_gomod_excludes_and_replaces(
                 log_func=log_func,
             )
             changes_made = True
+
+    # Remove tools.go-related replaces ONLY if the project has migrated away from
+    # tools.go (i.e., tools.go does not exist). For un-migrated projects, these
+    # replaces are still needed to resolve tools.go-induced transitive conflicts.
+    tools_go_exists = (module_path / "tools.go").exists()
+    if not tools_go_exists:
+        for old_module in list(existing_replaces):
+            if old_module in TOOLS_GO_OBSOLETE_REPLACES:
+                log_func(
+                    f"  → Removing tools.go-obsolete replace: {old_module}",
+                    to_console=True,
+                )
+                run_command(
+                    f"go mod edit -dropreplace {old_module}",
+                    cwd=module_path,
+                    quiet=True,
+                    log_func=log_func,
+                )
+                changes_made = True
 
     if not changes_made:
         log_func("  ✓ All excludes and replaces up to date", to_console=True)
