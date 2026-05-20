@@ -47,7 +47,6 @@ env/
 /.mcp-*
 /.mcp.json
 /.update-logs/
-/CLAUDE.md
 
 # Dark Factory
 /.dark-factory.lock
