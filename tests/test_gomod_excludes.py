@@ -141,16 +141,16 @@ replace (
 
 
 def test_apply_excludes_to_empty_gomod(tmp_path, mocker):
-    """Test applying excludes to empty go.mod is a no-op when STANDARD_REPLACES is empty."""
+    """Test applying excludes is a no-op when standard excludes already present."""
     gomod = tmp_path / "go.mod"
-    gomod.write_text("module example.com/test\n\ngo 1.23\n")
+    gomod.write_text("module example.com/test\n\ngo 1.23\n\nexclude cloud.google.com/go v0.26.0\n")
 
     # Mock run_command to avoid actual go mod edit calls
     mock_run = mocker.patch("updater.gomod_excludes.run_command")
 
     result = apply_gomod_excludes_and_replaces(tmp_path)
 
-    assert result is False  # No standard replaces to add
+    assert result is False  # Standard exclude already present, nothing to add
     assert mock_run.call_count == 0  # No commands run
 
 
@@ -162,6 +162,8 @@ def test_apply_excludes_idempotent(tmp_path, mocker):
     content = """module example.com/test
 
 go 1.23
+
+exclude cloud.google.com/go v0.26.0
 
 replace (
     github.com/charmbracelet/x/cellbuf => github.com/charmbracelet/x/cellbuf v0.0.15
@@ -183,7 +185,11 @@ replace (
 
 
 def test_apply_removes_old_non_k8s_excludes(tmp_path, mocker):
-    """Test that old non-k8s excludes are also removed as obsolete."""
+    """Test that old non-k8s excludes are removed as obsolete.
+
+    cloud.google.com/go@v0.26.0 is intentionally retained — it is a STANDARD
+    exclude (resolves the compute/metadata split-module ambiguity), not obsolete.
+    """
     gomod = tmp_path / "go.mod"
     content = """module example.com/test
 
@@ -208,7 +214,24 @@ exclude (
     result = apply_gomod_excludes_and_replaces(tmp_path)
 
     assert result is True  # Changes made — obsolete excludes removed
-    assert mock_run.call_count == 10  # 9 dropexclude + 1 go mod download
+    # 8 dropexclude (cloud.google.com/go retained) + 1 go mod download
+    assert mock_run.call_count == 9
+    calls = [str(c) for c in mock_run.call_args_list]
+    assert not any("dropexclude" in c and "cloud.google.com/go" in c for c in calls)
+
+
+def test_apply_adds_cloud_google_standard_exclude(tmp_path, mocker):
+    """Test that the cloud.google.com/go@v0.26.0 standard exclude is added when missing."""
+    gomod = tmp_path / "go.mod"
+    gomod.write_text("module example.com/test\n\ngo 1.23\n")
+
+    mock_run = mocker.patch("updater.gomod_excludes.run_command")
+
+    result = apply_gomod_excludes_and_replaces(tmp_path)
+
+    assert result is True
+    calls = [str(c) for c in mock_run.call_args_list]
+    assert any("-exclude cloud.google.com/go@v0.26.0" in c for c in calls)
 
 
 def test_apply_excludes_removes_obsolete_k8s_entries(tmp_path, mocker):
@@ -279,6 +302,8 @@ def test_apply_excludes_does_not_call_go_mod_download_when_no_changes(tmp_path, 
 
 go 1.23
 
+exclude cloud.google.com/go v0.26.0
+
 replace (
     github.com/charmbracelet/x/cellbuf => github.com/charmbracelet/x/cellbuf v0.0.15
     github.com/denis-tingaikin/go-header => github.com/denis-tingaikin/go-header v0.5.0
@@ -326,6 +351,8 @@ def test_tools_go_replaces_kept_when_tools_go_exists(tmp_path, mocker):
     content = """module example.com/test
 
 go 1.23
+
+exclude cloud.google.com/go v0.26.0
 
 replace (
     github.com/charmbracelet/x/cellbuf => github.com/charmbracelet/x/cellbuf v0.0.15

@@ -8,7 +8,15 @@ from .log_manager import log_message, run_command
 # Standard exclusions for problematic versions
 # NOTE: Excludes break `go install`, so keep this list empty unless absolutely necessary.
 # Use OBSOLETE_EXCLUDES_PREFIXES to actively remove old excludes from projects.
-STANDARD_EXCLUDES: list[str] = []
+#
+# cloud.google.com/go v0.26.0: the pre-split monorepo version still bundles the
+# cloud.google.com/go/compute/metadata package, which now ships as its own
+# module. When both land in the build graph (e.g. via golang.org/x/oauth2/google),
+# `go mod tidy` fails with "ambiguous import". Excluding the stale version forces
+# MVS to drop it so only the split-out module provides the package.
+STANDARD_EXCLUDES: list[str] = [
+    "cloud.google.com/go@v0.26.0",
+]
 
 # Standard replacements
 # Format: (old_module, "new_module version")
@@ -23,7 +31,6 @@ STANDARD_REPLACES: list[tuple[str, str]] = []
 # Exclude prefixes that should be REMOVED from projects (obsolete workarounds)
 # These broke `go install` for all modules. The updater actively removes them.
 OBSOLETE_EXCLUDES_PREFIXES = [
-    "cloud.google.com/go@",
     "github.com/go-logr/glogr@",
     "github.com/go-logr/logr@",
     "github.com/golangci/golangci-lint@",  # v1 excludes break go mod tidy after v2 migration
