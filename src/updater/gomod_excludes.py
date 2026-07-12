@@ -6,17 +6,18 @@ from pathlib import Path
 from .log_manager import log_message, run_command
 
 # Standard exclusions for problematic versions
-# NOTE: Excludes break `go install`, so keep this list empty unless absolutely necessary.
+# NOTE: Excludes and replaces break `go install <module>@latest` — Go rejects a
+# main-module go.mod containing those directives. Keep this list empty unless
+# absolutely necessary.
 # Use OBSOLETE_EXCLUDES_PREFIXES to actively remove old excludes from projects.
 #
-# cloud.google.com/go v0.26.0: the pre-split monorepo version still bundles the
-# cloud.google.com/go/compute/metadata package, which now ships as its own
-# module. When both land in the build graph (e.g. via golang.org/x/oauth2/google),
-# `go mod tidy` fails with "ambiguous import". Excluding the stale version forces
-# MVS to drop it so only the split-out module provides the package.
-STANDARD_EXCLUDES: list[str] = [
-    "cloud.google.com/go@v0.26.0",
-]
+# The former cloud.google.com/go@v0.26.0 entry was removed: it was applied to
+# every repo, breaking `go install github.com/<owner>/<repo>@latest` fleet-wide,
+# for a `compute/metadata` split-module ambiguity that only arises in repos pulling
+# `golang.org/x/oauth2/google` and no longer triggers in modern dependency graphs
+# (where cloud.google.com/go resolves far above v0.26.0). Repos that still need
+# the exclude surface a loud `go mod tidy` error and can be handled case-by-case.
+STANDARD_EXCLUDES: list[str] = []
 
 # Standard replacements
 # Format: (old_module, "new_module version")
