@@ -2,6 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
+## Unreleased
+
+- fix: stop injecting `exclude cloud.google.com/go v0.26.0` into every go.mod (empty `STANDARD_EXCLUDES`) — it broke `go install <module>@latest` fleet-wide; existing excludes are left untouched (not added to `OBSOLETE_EXCLUDES_PREFIXES`, so nothing is actively stripped).
+
 ## v0.23.3
 
 - fix: Add `cloud.google.com/go@v0.26.0` to `STANDARD_EXCLUDES` and drop it from `OBSOLETE_EXCLUDES_PREFIXES` — the pre-split monorepo version still bundles the `cloud.google.com/go/compute/metadata` package, which now ships as its own module. When both land in the build graph (e.g. via `golang.org/x/oauth2/google`), `go mod tidy` fails with `ambiguous import`. The exclude forces MVS to drop the stale version so only the split-out module provides the package. `go mod tidy` preserves the exclude, so the fix is durable.

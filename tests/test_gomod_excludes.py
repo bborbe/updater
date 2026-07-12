@@ -141,7 +141,9 @@ replace (
 
 
 def test_apply_excludes_to_empty_gomod(tmp_path, mocker):
-    """Test applying excludes is a no-op when standard excludes already present."""
+    """Test that a go.mod containing only a non-standard, non-obsolete exclude
+    produces no changes — nothing to add (STANDARD_EXCLUDES is empty) and nothing
+    to drop (cloud.google.com/go is not listed in OBSOLETE_EXCLUDES_PREFIXES)."""
     gomod = tmp_path / "go.mod"
     gomod.write_text("module example.com/test\n\ngo 1.23\n\nexclude cloud.google.com/go v0.26.0\n")
 
@@ -187,8 +189,9 @@ replace (
 def test_apply_removes_old_non_k8s_excludes(tmp_path, mocker):
     """Test that old non-k8s excludes are removed as obsolete.
 
-    cloud.google.com/go@v0.26.0 is intentionally retained — it is a STANDARD
-    exclude (resolves the compute/metadata split-module ambiguity), not obsolete.
+    cloud.google.com/go@v0.26.0 is left untouched: it is neither a STANDARD
+    exclude (STANDARD_EXCLUDES is empty; nothing is added) nor listed in
+    OBSOLETE_EXCLUDES_PREFIXES (nothing is actively removed).
     """
     gomod = tmp_path / "go.mod"
     content = """module example.com/test
@@ -220,8 +223,8 @@ exclude (
     assert not any("dropexclude" in c and "cloud.google.com/go" in c for c in calls)
 
 
-def test_apply_adds_cloud_google_standard_exclude(tmp_path, mocker):
-    """Test that the cloud.google.com/go@v0.26.0 standard exclude is added when missing."""
+def test_apply_does_not_add_cloud_google_exclude(tmp_path, mocker):
+    """Test that cloud.google.com/go is NOT added — STANDARD_EXCLUDES is empty."""
     gomod = tmp_path / "go.mod"
     gomod.write_text("module example.com/test\n\ngo 1.23\n")
 
@@ -229,9 +232,10 @@ def test_apply_adds_cloud_google_standard_exclude(tmp_path, mocker):
 
     result = apply_gomod_excludes_and_replaces(tmp_path)
 
-    assert result is True
+    assert result is False  # No changes — nothing to add
     calls = [str(c) for c in mock_run.call_args_list]
-    assert any("-exclude cloud.google.com/go@v0.26.0" in c for c in calls)
+    assert not any("cloud.google.com/go" in c for c in calls)
+    assert not any("go mod download" in c for c in calls)
 
 
 def test_apply_excludes_removes_obsolete_k8s_entries(tmp_path, mocker):
