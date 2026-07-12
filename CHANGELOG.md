@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## Unreleased
+## v0.23.4
 
 - fix: stop injecting `exclude cloud.google.com/go v0.26.0` into every go.mod (empty `STANDARD_EXCLUDES`) — it broke `go install <module>@latest` fleet-wide; existing excludes are left untouched (not added to `OBSOLETE_EXCLUDES_PREFIXES`, so nothing is actively stripped).
 
