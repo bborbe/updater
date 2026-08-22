@@ -1,8 +1,13 @@
 ---
-status: approved
+status: completed
 spec: [003-infra-tier-special-case-handlers]
+summary: Added the BundleWrap infra-tier handler (updater bundlewrap) reusing process_infra_target, wired it into cli.py with X.Y.Z-validated --go-version, added a CHANGELOG Unreleased entry, and covered it with 8 handler tests + 1 CLI dispatch test (100% module coverage); make precommit exits 0
+execution_id: updater-exec-043-spec-003-bundlewrap-handler
+dark-factory-version: dev
 created: "2026-08-22T21:50:00Z"
 queued: "2026-08-22T21:19:40Z"
+started: "2026-08-22T22:02:03Z"
+completed: "2026-08-22T22:03:53Z"
 ---
 
 # BundleWrap infra-tier handler

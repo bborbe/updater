@@ -8,6 +8,7 @@ from importlib.metadata import version as pkg_version
 from pathlib import Path
 
 from . import config
+from .bundlewrap_handler import BundleWrapHandler
 from .claude_analyzer import verify_claude_auth
 from .claude_metrics import metrics
 from .claude_yolo_handler import ClaudeYoloHandler
@@ -2056,6 +2057,21 @@ async def main_updater_async() -> int:
         help="Target claude-yolo release tag (e.g. v0.16.0); defaults to claude-yolo's latest GitHub release",
     )
 
+    sub = subparsers.add_parser(
+        "bundlewrap",
+        help="Bump default_golang_version in BundleWrap bundles/golang/items.py and open a PR",
+    )
+    sub.add_argument("path", help="Path to the BundleWrap checkout")
+    sub.add_argument(
+        "--dry-run", action="store_true", help="Show the diff and exit without opening a PR"
+    )
+    sub.add_argument(
+        "--go-version",
+        required=True,
+        metavar="X.Y.Z",
+        help="Target Go version to set in default_golang_version (e.g. 1.28.0)",
+    )
+
     args = parser.parse_args()
 
     if args.subcommand is None:
@@ -2099,8 +2115,12 @@ async def main_updater_async() -> int:
         return DarkFactoryHandler().run(
             Path(args.path), dry_run=args.dry_run, claude_yolo_tag=args.claude_yolo_tag
         )
+    elif args.subcommand == "bundlewrap":
+        return BundleWrapHandler().run(
+            Path(args.path), dry_run=args.dry_run, go_version=args.go_version
+        )
     else:
-        valid = ", ".join([*_sub_descs.keys(), "claude-yolo", "dark-factory"])
+        valid = ", ".join([*_sub_descs.keys(), "claude-yolo", "dark-factory", "bundlewrap"])
         print(f"✗ Unknown subcommand: {args.subcommand!r}. Valid subcommands: {valid}")
         return 1
 

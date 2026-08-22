@@ -6,6 +6,7 @@ All notable changes to this project will be documented in this file.
 
 - feat: Add infra-tier claude-yolo handler (updater claude-yolo) and the shared patch-and-PR helper reused by the other infra-tier handlers
 - feat: Add infra-tier dark-factory handler (updater dark-factory) — bumps DefaultContainerImage from claude-yolo's latest release tag
+- feat: Add infra-tier BundleWrap handler (updater bundlewrap) — bumps default_golang_version
 
 ## v0.23.4
 

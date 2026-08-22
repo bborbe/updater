@@ -2220,3 +2220,29 @@ class TestMainUpdaterAsync:
         mock_handler.return_value.run.assert_called_once_with(
             Path(str(tmp_path)), dry_run=True, claude_yolo_tag="v0.16.0"
         )
+
+    @pytest.mark.asyncio
+    async def test_bundlewrap_subcommand_dispatch(self, tmp_path, reset_config):
+        """Test 'bundlewrap' dispatches to the handler with the parsed args."""
+        with (
+            patch(
+                "sys.argv",
+                [
+                    "updater",
+                    "bundlewrap",
+                    str(tmp_path),
+                    "--dry-run",
+                    "--go-version",
+                    "1.28.0",
+                ],
+            ),
+            patch("updater.cli.BundleWrapHandler") as mock_handler,
+            patch("builtins.print"),
+        ):
+            mock_handler.return_value.run.return_value = 0
+            exit_code = await main_updater_async()
+
+        assert exit_code == 0
+        mock_handler.return_value.run.assert_called_once_with(
+            Path(str(tmp_path)), dry_run=True, go_version="1.28.0"
+        )
