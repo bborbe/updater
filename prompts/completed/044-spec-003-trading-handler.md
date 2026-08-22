@@ -1,8 +1,13 @@
 ---
-status: approved
+status: completed
 spec: [003-infra-tier-special-case-handlers]
+summary: Added the trading infra-tier handler (updater trading) that bumps the bborbe/trading Makefile.folder go X.Y.Z constant via a feature worktree + make ensurecommit, wired it into cli.py, and added full test coverage
+execution_id: updater-exec-044-spec-003-trading-handler
+dark-factory-version: dev
 created: "2026-08-22T21:55:00Z"
 queued: "2026-08-22T21:19:40Z"
+started: "2026-08-22T22:03:54Z"
+completed: "2026-08-22T22:07:16Z"
 ---
 
 # trading infra-tier handler

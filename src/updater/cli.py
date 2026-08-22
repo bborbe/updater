@@ -36,6 +36,7 @@ from .module_discovery import (
 )
 from .prompts import prompt_skip_or_retry, prompt_yes_no
 from .sound import play_completion_sound, play_error_sound
+from .trading_handler import TradingHandler
 
 
 def print_commit_summary(
@@ -2072,6 +2073,21 @@ async def main_updater_async() -> int:
         help="Target Go version to set in default_golang_version (e.g. 1.28.0)",
     )
 
+    sub = subparsers.add_parser(
+        "trading",
+        help="Bump the Go version in bborbe/trading Makefile.folder and open a PR",
+    )
+    sub.add_argument("path", help="Path to the bborbe/trading checkout")
+    sub.add_argument(
+        "--dry-run", action="store_true", help="Show the diff and exit without opening a PR"
+    )
+    sub.add_argument(
+        "--go-version",
+        required=True,
+        metavar="X.Y.Z",
+        help="Target Go version to set in Makefile.folder (e.g. 1.28.0)",
+    )
+
     args = parser.parse_args()
 
     if args.subcommand is None:
@@ -2119,8 +2135,14 @@ async def main_updater_async() -> int:
         return BundleWrapHandler().run(
             Path(args.path), dry_run=args.dry_run, go_version=args.go_version
         )
+    elif args.subcommand == "trading":
+        return TradingHandler().run(
+            Path(args.path), dry_run=args.dry_run, go_version=args.go_version
+        )
     else:
-        valid = ", ".join([*_sub_descs.keys(), "claude-yolo", "dark-factory", "bundlewrap"])
+        valid = ", ".join(
+            [*_sub_descs.keys(), "claude-yolo", "dark-factory", "bundlewrap", "trading"]
+        )
         print(f"✗ Unknown subcommand: {args.subcommand!r}. Valid subcommands: {valid}")
         return 1
 
