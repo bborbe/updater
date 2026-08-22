@@ -1,7 +1,8 @@
 ---
-status: approved
+status: verifying
 approved: "2026-08-22T20:40:58Z"
 generating: "2026-08-22T20:41:46Z"
+verifying: "2026-08-22T22:07:16Z"
 branch: dark-factory/infra-tier-special-case-handlers
 ---
 
