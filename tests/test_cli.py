@@ -1,5 +1,6 @@
 """Tests for CLI orchestration and workflow."""
 
+from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -2157,3 +2158,39 @@ class TestMainUpdaterAsync:
 
         assert result == 0
         mock_asyncio_run.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_claude_yolo_subcommand_dispatch(self, tmp_path, reset_config):
+        """Test 'claude-yolo' dispatches to the handler with the parsed args."""
+        with (
+            patch(
+                "sys.argv",
+                [
+                    "updater",
+                    "claude-yolo",
+                    str(tmp_path),
+                    "--dry-run",
+                    "--go-version",
+                    "1.28.0",
+                ],
+            ),
+            patch("updater.cli.ClaudeYoloHandler") as mock_handler,
+            patch("builtins.print"),
+        ):
+            mock_handler.return_value.run.return_value = 0
+            exit_code = await main_updater_async()
+
+        assert exit_code == 0
+        mock_handler.return_value.run.assert_called_once_with(
+            Path(str(tmp_path)), dry_run=True, go_version="1.28.0"
+        )
+
+    @pytest.mark.asyncio
+    async def test_claude_yolo_subcommand_requires_go_version(self, tmp_path, reset_config):
+        """Test 'claude-yolo' without --go-version exits via argparse SystemExit."""
+        with (
+            patch("sys.argv", ["updater", "claude-yolo", str(tmp_path)]),
+            patch("builtins.print"),
+            pytest.raises(SystemExit),
+        ):
+            await main_updater_async()

@@ -10,6 +10,7 @@ from pathlib import Path
 from . import config
 from .claude_analyzer import verify_claude_auth
 from .claude_metrics import metrics
+from .claude_yolo_handler import ClaudeYoloHandler
 from .docker_updater import update_dockerfile_images
 from .file_utils import condense_file_list
 from .git_operations import (
@@ -2024,6 +2025,21 @@ async def main_updater_async() -> int:
             help="Path(s) to module(s) or parent directories (default: current directory)",
         )
 
+    sub = subparsers.add_parser(
+        "claude-yolo",
+        help="Bump ARG GO_VERSION in the bborbe/claude-yolo Dockerfile and open a PR",
+    )
+    sub.add_argument("path", help="Path to the bborbe/claude-yolo checkout")
+    sub.add_argument(
+        "--dry-run", action="store_true", help="Show the diff and exit without opening a PR"
+    )
+    sub.add_argument(
+        "--go-version",
+        required=True,
+        metavar="X.Y.Z",
+        help="Target Go version to set in ARG GO_VERSION (e.g. 1.28.0)",
+    )
+
     args = parser.parse_args()
 
     if args.subcommand is None:
@@ -2059,8 +2075,12 @@ async def main_updater_async() -> int:
         return await _run_release_modules(args.modules)
     elif args.subcommand == "fix":
         return await _run_go_modules(args.modules, project_type="go-fix")
+    elif args.subcommand == "claude-yolo":
+        return ClaudeYoloHandler().run(
+            Path(args.path), dry_run=args.dry_run, go_version=args.go_version
+        )
     else:
-        valid = ", ".join(_sub_descs.keys())
+        valid = ", ".join([*_sub_descs.keys(), "claude-yolo"])
         print(f"✗ Unknown subcommand: {args.subcommand!r}. Valid subcommands: {valid}")
         return 1
 

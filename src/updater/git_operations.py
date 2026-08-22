@@ -1,10 +1,12 @@
 """Git operations: status, commit, tag, branch management."""
 
+import json
 import subprocess
 from collections.abc import Callable
 from pathlib import Path
 
 from . import config
+from .log_manager import log_message
 
 
 def is_git_available(path: Path) -> bool:
@@ -493,3 +495,92 @@ def git_push(module_path: Path, log_func: Callable[..., None]) -> None:
     run_command("git push origin --tags", cwd=module_path, quiet=True, log_func=log_func)
 
     log_func("✓ Push completed", to_console=True)
+
+
+def git_checkout_new_branch(
+    module_path: Path, branch_name: str, log_func: Callable[..., None] = log_message
+) -> None:
+    """Create and switch to a new feature branch from the current HEAD.
+
+    Args:
+        module_path: Path to module
+        branch_name: Name of the new branch (controlled constant, never free-form input)
+        log_func: Logging function to use
+
+    Raises:
+        RuntimeError: If git checkout fails
+    """
+    from .log_manager import run_command
+
+    run_command(f"git checkout -b {branch_name}", cwd=module_path, quiet=True, log_func=log_func)
+
+
+def find_existing_pull_request(
+    module_path: Path, repo: str, log_func: Callable[..., None] = log_message
+) -> str | None:
+    """Return the URL of the first open PR whose head branch matches 'updater', or None.
+
+    Args:
+        module_path: Path to module
+        repo: GitHub repository in owner/name form
+        log_func: Logging function to use
+
+    Returns:
+        URL of the first matching open PR, or None if there is none
+
+    Raises:
+        RuntimeError: If the gh command fails
+    """
+    from .log_manager import run_command
+
+    result = run_command(
+        f'gh pr list --repo {repo} --search "head:updater" --state open --json url',
+        cwd=module_path,
+        capture_output=True,
+        quiet=True,
+        log_func=log_func,
+    )
+
+    if not result.stdout.strip():
+        return None
+
+    pull_requests = json.loads(result.stdout)
+    if not pull_requests:
+        return None
+    return pull_requests[0].get("url")
+
+
+def create_pull_request(
+    module_path: Path,
+    repo: str,
+    branch: str,
+    title: str,
+    body: str,
+    log_func: Callable[..., None] = log_message,
+) -> str:
+    """Open a pull request via gh for branch in repo. Returns the PR URL.
+
+    Args:
+        module_path: Path to module
+        repo: GitHub repository in owner/name form
+        branch: Head branch to open the PR from
+        title: PR title
+        body: PR body
+        log_func: Logging function to use
+
+    Returns:
+        URL of the opened pull request
+
+    Raises:
+        RuntimeError: If the gh command fails
+    """
+    from .log_manager import run_command
+
+    result = run_command(
+        f'gh pr create --repo {repo} --head {branch} --title "{title}" --body "{body}"',
+        cwd=module_path,
+        capture_output=True,
+        quiet=True,
+        log_func=log_func,
+    )
+    return result.stdout.strip()
