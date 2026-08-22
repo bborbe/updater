@@ -8,7 +8,7 @@ from .log_manager import log_message
 
 BUNDLEWRAP_REPO = "bw2/BundleWrap"
 BUNDLEWRAP_FILE = "bundles/golang/items.py"
-BUNDLEWRAP_PATTERN = re.compile(r"^default_golang_version = '(\d+\.\d+\.\d+)'$")
+BUNDLEWRAP_PATTERN = re.compile(r"^default_golang_version = '(\d+\.\d+\.\d+)'$", re.MULTILINE)
 
 
 class BundleWrapHandler:

@@ -8,7 +8,7 @@ from .log_manager import log_message
 
 CLAUDE_YOLO_REPO = "bborbe/claude-yolo"
 CLAUDE_YOLO_FILE = "Dockerfile"
-CLAUDE_YOLO_PATTERN = re.compile(r"^ARG GO_VERSION=(\d+\.\d+\.\d+)$")
+CLAUDE_YOLO_PATTERN = re.compile(r"^ARG GO_VERSION=(\d+\.\d+\.\d+)$", re.MULTILINE)
 
 
 class ClaudeYoloHandler:
