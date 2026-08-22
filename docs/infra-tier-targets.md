@@ -9,7 +9,7 @@ These are the frozen targets for the infra-tier special-case handlers (spec
 | claude-yolo | `bborbe/claude-yolo` | `Dockerfile` | `ARG GO_VERSION=X.Y.Z` | `ARG GO_VERSION=1.27.0` |
 | dark-factory | `bborbe/dark-factory` | `pkg/const.go` | `DefaultContainerImage = "docker.io/bborbe/claude-yolo:vA.B.C"` (tracks claude-yolo's release tag, NOT the Go version directly) | `DefaultContainerImage = "docker.io/bborbe/claude-yolo:v0.15.1"` |
 | BundleWrap | BundleWrap repo | `bundles/golang/items.py` | `default_golang_version = 'X.Y.Z'` | `default_golang_version = '1.27.0'` |
-| trading monorepo | `bborbe/trading` | `Makefile.folder` | `go X.Y.Z` constant | (present; current value per repo) |
+| trading monorepo | `bborbe/trading` | no central constant — version lives across every module's `go.mod`/`Dockerfile`/workflow | `make updategoversion` → `update-go-version.sh` (bumps all to latest from go.dev) | (no `Makefile.folder go X.Y.Z` line exists — verified 2026-08-22) |
 
 ## claude-yolo release flow
 
@@ -18,16 +18,22 @@ These are the frozen targets for the infra-tier special-case handlers (spec
 - dark-factory's `DefaultContainerImage` must be bumped to the **new claude-yolo tag** after that
   publish — resolved from claude-yolo's latest GitHub release, not the Go version directly.
 
-## trading monorepo — the 2026-06-03 canonical pattern
+## trading monorepo — the real mechanism (verified 2026-08-22)
 
-For the trading monorepo (`bborbe/trading`), do NOT edit `Makefile.folder` in the working tree
-directly:
+The trading monorepo (`bborbe/trading`) has **no central Go version constant** —
+`Makefile.folder` never contained a `go X.Y.Z` line (confirmed via git history).
+The canonical mechanism is `make updategoversion`, which runs
+`update-go-version.sh` (in `~/Documents/workspaces/scripts/`) per module. That
+script bumps **all** of these to the latest Go release from go.dev (excluding
+`vendor/`):
 
-1. Create a feature worktree from `master`.
-2. Bump the `go X.Y.Z` constant in `Makefile.folder`.
-3. Run `make ensurecommit` in that worktree — it propagates the Go version to every per-module
-   `Makefile`/config the monorepo needs.
-4. Open a PR (the monorepo's standard flow).
+1. Every `go.mod` `go X.Y.Z` directive + `toolchain goX.Y.Z` directive
+2. Every Dockerfile `FROM golang:X.Y.Z`
+3. Every `.github/workflows/*.yml` `go-version: 'X.Y.Z'` pin
+
+The trading handler replicates exactly these sed patterns, driven by an explicit
+`--go-version` target instead of a runtime fetch from go.dev. Real run: feature
+worktree from `master` → apply the walk → commit → push → PR.
 
 ## Handler module convention
 

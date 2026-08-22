@@ -9,14 +9,14 @@ branch: dark-factory/infra-tier-special-case-handlers
 ## Summary
 
 - Add four handler classes to `updater` that patch-and-PR the infra-tier files the generic Go updater can't touch
-- Each handler targets one repo + one file + one constant: claude-yolo `Dockerfile ARG GO_VERSION`, dark-factory `pkg/const.go DefaultContainerImage`, BundleWrap `bundles/golang/items.py default_golang_version`, trading `Makefile.folder go X.Y.Z` + `make ensurecommit`
+- Each handler targets one repo + one file + one constant: claude-yolo `Dockerfile ARG GO_VERSION`, dark-factory `pkg/const.go DefaultContainerImage`, BundleWrap `bundles/golang/items.py default_golang_version`, trading monorepo (no single constant — replicates `update-go-version.sh`'s walk across go.mod/Dockerfile/workflow pins)
 - Each handler supports `--dry-run` (show diff, no PR) and a real run (open PR in the target repo)
 - Handlers live as classes in `src/updater/` matching the existing per-domain updater convention (`go_updater.py`, `docker_updater.py`, `python_updater.py`)
 - The sibling [[Build Trigger Ordering State Machine]] will invoke these handlers in order
 
 ## Problem
 
-The generic `updater` tool bumps the 33 standard Go projects. Four infra-tier targets have unique files/constants the generic tool can't touch — claude-yolo (Dockerfile `ARG GO_VERSION`), dark-factory (Go const tracking claude-yolo's release tag), BundleWrap (Python `default_golang_version`), trading monorepo (`Makefile.folder` + per-module `make ensurecommit`). Without handlers for these, "fleet-wide" stops at 33 repos and the operator hand-edits the other four every Go release.
+The generic `updater` tool bumps the 33 standard Go projects. Four infra-tier targets have unique files/constants the generic tool can't touch — claude-yolo (Dockerfile `ARG GO_VERSION`), dark-factory (Go const tracking claude-yolo's release tag), BundleWrap (Python `default_golang_version`), trading monorepo (no central constant — the version lives across every module's go.mod/Dockerfile/workflow, updated via `make updategoversion` → `update-go-version.sh`). Without handlers for these, "fleet-wide" stops at 33 repos and the operator hand-edits the other four every Go release.
 
 ## Goal
 
@@ -45,8 +45,8 @@ The updater can bump all four infra-tier targets autonomously: a handler exists 
 - [ ] The dark-factory handler's real run opens a PR in `bborbe/dark-factory` — probe: `gh pr list --repo bborbe/dark-factory --search 'head:updater'` shows one open PR
 - [ ] `src/updater/` contains a BundleWrap handler module; `--dry-run` shows a diff touching `bundles/golang/items.py` `default_golang_version` — negative evidence: `git diff --name-only` lists exactly `bundles/golang/items.py`
 - [ ] The BundleWrap handler's real run opens a PR in the BundleWrap repo — probe: `gh pr list --repo <bw-repo> --search 'head:updater'` shows one open PR
-- [ ] `src/updater/` contains a trading handler module; `--dry-run` shows a diff touching `Makefile.folder` `go X.Y.Z` — negative evidence: `git diff --name-only` lists exactly `Makefile.folder`
-- [ ] The trading handler's real run opens a PR in the trading monorepo (feature worktree, `make ensurecommit` per the 2026-06-03 canonical pattern) — probe: `gh pr list --repo bborbe/trading --search 'head:updater'` shows one open PR
+- [ ] `src/updater/` contains a trading handler module; `--dry-run` applies the `update-go-version.sh` walk (go.mod `go`+`toolchain`, Dockerfile `FROM golang:`, workflow `go-version:`, excluding vendor/) to the target version — negative evidence: `git diff --name-only` lists the patched go.mod/Dockerfile/workflow files and never vendor/
+- [ ] The trading handler's real run opens a PR in the trading monorepo (feature worktree from master, apply the walk, commit, push) — probe: `gh pr list --repo bborbe/trading --search 'head:updater'` shows one open PR
 - [ ] Each handler exits 0 on `--dry-run` with an up-to-date target (no spurious diff) — negative evidence: `git diff` of the target file is empty
 - [ ] A real run against an already-current target, or against a target with an existing open `head:updater` PR, exits 0 and opens no new PR — negative evidence: `git diff` of the target file empty after run; `gh pr list --repo <target> --search 'head:updater'` shows no new PR from the handler (existing one, if any, is reported by URL and left alone)
 - [ ] Existing updater tests pass unchanged (`make precommit` exit 0)
@@ -79,7 +79,7 @@ The updater can bump all four infra-tier targets autonomously: a handler exists 
 
 - Handlers live in `src/updater/` as modules following the `pipeline.py` Step-class pattern (repo convention — no `handlers/` dir); CLI wiring in `cli.py`
 - Reuse existing `git_operations.py` (branch/PR) and `config.py` where possible — no new bespoke git implementation
-- Target repos' files are frozen — the canonical map is `docs/infra-tier-targets.md` (see Recommendation); current paths: claude-yolo `Dockerfile` `ARG GO_VERSION=X.Y.Z`, dark-factory `pkg/const.go` `DefaultContainerImage = "docker.io/bborbe/claude-yolo:vA.B.C"`, BundleWrap `bundles/golang/items.py` `default_golang_version = 'X.Y.Z'`, trading `Makefile.folder` `go X.Y.Z` + per-module `make ensurecommit` (the "2026-06-03 canonical pattern" — feature worktree + `make ensurecommit`, documented in `docs/infra-tier-targets.md`)
+- Target repos' files are frozen — the canonical map is `docs/infra-tier-targets.md` (see Recommendation); current paths: claude-yolo `Dockerfile` `ARG GO_VERSION=X.Y.Z`, dark-factory `pkg/const.go` `DefaultContainerImage = "docker.io/bborbe/claude-yolo:vA.B.C"`, BundleWrap `bundles/golang/items.py` `default_golang_version = 'X.Y.Z'`, trading monorepo (no central constant — the handler replicates `update-go-version.sh`'s sed walk: go.mod `go`/`toolchain`, Dockerfile `FROM golang:`, workflow `go-version:`, excluding vendor/; feature worktree from master, documented in `docs/infra-tier-targets.md`)
 - Handler invocation order for the state machine is owned by the sibling [[Build Trigger Ordering State Machine]] spec — this spec's handlers are each independently invocable
 - `make precommit` stays green; existing tests unchanged
 - PRs use the conventional `chore:` / `feat:` prefix and `## Unreleased` CHANGELOG bullet per repo (autoRelease repos need the bullet)
@@ -111,7 +111,7 @@ Prompts generated in this order — each is a single handler + its test.
 | 1 | claude-yolo handler class + CLI subcommand + tests | 1, 3, 5 | 1, 2, 9, 10 | — |
 | 2 | dark-factory handler (claude-yolo tag resolution) + tests | 2, 3, 5 | 3, 4, 9, 10 | prompt 1 (shares patch-and-PR helper) |
 | 3 | BundleWrap handler + tests | 3, 5 | 5, 6, 9, 10 | prompt 1 (shares helper) |
-| 4 | trading handler (worktree + ensurecommit) + tests | 4, 5 | 7, 8, 9, 10 | prompt 1 (shares helper) |
+| 4 | trading handler (worktree + sed walk) + tests | 4, 5 | 7, 8, 9, 10 | prompt 1 (shares helper) |
 
 Rationale: prompt 1 establishes the shared patch-and-PR helper + CLI wiring; prompts 2-4 each add one target reusing it; all four are independently verifiable. A shared helper (patch file → diff → branch → PR) is extracted in prompt 1 and reused.
 
