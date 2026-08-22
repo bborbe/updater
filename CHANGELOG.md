@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## Unreleased
+## v0.24.0
 
 - feat: Add infra-tier claude-yolo handler (updater claude-yolo) and the shared patch-and-PR helper reused by the other infra-tier handlers
 - feat: Add infra-tier dark-factory handler (updater dark-factory) — bumps DefaultContainerImage from claude-yolo's latest release tag
