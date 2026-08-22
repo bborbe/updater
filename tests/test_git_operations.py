@@ -6,8 +6,11 @@ import pytest
 
 from updater.git_operations import (
     check_git_status,
+    create_pull_request,
+    find_existing_pull_request,
     get_commits_since_tag,
     get_latest_tag,
+    git_checkout_new_branch,
     git_commit,
     git_push,
     git_tag_from_changelog,
@@ -571,3 +574,111 @@ def test_get_commits_since_tag_git_error(tmp_path):
         result = get_commits_since_tag(tmp_path, "v1.0.0")
 
         assert result == []
+
+
+# --- branch and PR helpers ---
+
+
+def test_git_checkout_new_branch(tmp_path):
+    """Test git_checkout_new_branch runs git checkout -b with the branch name."""
+    log = Mock()
+
+    with patch("updater.log_manager.run_command") as mock_run:
+        git_checkout_new_branch(tmp_path, "updater/claude-yolo-1.28.0", log_func=log)
+
+    mock_run.assert_called_once()
+    cmd = mock_run.call_args[0][0]
+    assert "git checkout -b updater/claude-yolo-1.28.0" in cmd
+
+
+def test_find_existing_pull_request_none(tmp_path):
+    """Test find_existing_pull_request returns None for an empty PR list."""
+    log = Mock()
+
+    with patch("updater.log_manager.run_command") as mock_run:
+        mock_run.return_value = Mock(returncode=0, stdout="[]")
+
+        result = find_existing_pull_request(tmp_path, "bborbe/claude-yolo", log_func=log)
+
+    assert result is None
+
+
+def test_find_existing_pull_request_empty_stdout(tmp_path):
+    """Test find_existing_pull_request returns None for empty stdout."""
+    log = Mock()
+
+    with patch("updater.log_manager.run_command") as mock_run:
+        mock_run.return_value = Mock(returncode=0, stdout="")
+
+        result = find_existing_pull_request(tmp_path, "bborbe/claude-yolo", log_func=log)
+
+    assert result is None
+
+
+def test_find_existing_pull_request_found(tmp_path):
+    """Test find_existing_pull_request returns the first open PR's URL."""
+    log = Mock()
+
+    with patch("updater.log_manager.run_command") as mock_run:
+        mock_run.return_value = Mock(
+            returncode=0,
+            stdout='[{"url": "https://github.com/bborbe/claude-yolo/pull/5"}]',
+        )
+
+        result = find_existing_pull_request(tmp_path, "bborbe/claude-yolo", log_func=log)
+
+    assert result == "https://github.com/bborbe/claude-yolo/pull/5"
+
+
+def test_find_existing_pull_request_gh_error(tmp_path):
+    """Test find_existing_pull_request propagates RuntimeError from gh."""
+    log = Mock()
+
+    with patch("updater.log_manager.run_command") as mock_run:
+        mock_run.side_effect = RuntimeError("gh pr list failed")
+
+        with pytest.raises(RuntimeError):
+            find_existing_pull_request(tmp_path, "bborbe/claude-yolo", log_func=log)
+
+
+def test_create_pull_request_returns_url(tmp_path):
+    """Test create_pull_request returns the PR URL and builds the gh command."""
+    log = Mock()
+    url = "https://github.com/bborbe/claude-yolo/pull/6"
+
+    with patch("updater.log_manager.run_command") as mock_run:
+        mock_run.return_value = Mock(returncode=0, stdout=url)
+
+        result = create_pull_request(
+            tmp_path,
+            "bborbe/claude-yolo",
+            "updater/claude-yolo-1.28.0",
+            "chore: bump Go version to 1.28.0 in Dockerfile",
+            "Bump ARG GO_VERSION to 1.28.0.",
+            log_func=log,
+        )
+
+    assert result == url
+    cmd = mock_run.call_args[0][0]
+    assert "--repo bborbe/claude-yolo" in cmd
+    assert "--head updater/claude-yolo-1.28.0" in cmd
+    assert "chore: bump Go version to 1.28.0 in Dockerfile" in cmd
+    assert "Bump ARG GO_VERSION to 1.28.0." in cmd
+
+
+def test_create_pull_request_failure_propagates(tmp_path):
+    """Test create_pull_request propagates RuntimeError from gh."""
+    log = Mock()
+
+    with patch("updater.log_manager.run_command") as mock_run:
+        mock_run.side_effect = RuntimeError("gh pr create failed")
+
+        with pytest.raises(RuntimeError):
+            create_pull_request(
+                tmp_path,
+                "bborbe/claude-yolo",
+                "updater/claude-yolo-1.28.0",
+                "title",
+                "body",
+                log_func=log,
+            )

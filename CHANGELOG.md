@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## Unreleased
+
+- feat: Add infra-tier claude-yolo handler (updater claude-yolo) and the shared patch-and-PR helper reused by the other infra-tier handlers
+- feat: Add infra-tier dark-factory handler (updater dark-factory) — bumps DefaultContainerImage from claude-yolo's latest release tag
+- feat: Add infra-tier BundleWrap handler (updater bundlewrap) — bumps default_golang_version
+- feat: Add infra-tier trading handler (updater trading) — replicates update-go-version.sh's walk (go.mod `go`/`toolchain`, Dockerfile `FROM golang:`, workflow `go-version:`) in a feature worktree
+
 ## v0.23.4
 
 - fix: stop injecting `exclude cloud.google.com/go v0.26.0` into every go.mod (empty `STANDARD_EXCLUDES`) — it broke `go install <module>@latest` fleet-wide; existing excludes are left untouched (not added to `OBSOLETE_EXCLUDES_PREFIXES`, so nothing is actively stripped).
