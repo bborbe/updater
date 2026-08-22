@@ -1,8 +1,13 @@
 ---
-status: approved
+status: completed
 spec: [003-infra-tier-special-case-handlers]
+summary: Added the dark-factory infra-tier handler (updater dark-factory subcommand) that bumps DefaultContainerImage in bborbe/dark-factory pkg/const.go via the shared process_infra_target helper, wired it into cli.py, updated the CHANGELOG, and added 14 tests (100% coverage on the new module).
+execution_id: updater-exec-042-spec-003-dark-factory-handler
+dark-factory-version: dev
 created: "2026-08-22T21:45:00Z"
 queued: "2026-08-22T21:19:40Z"
+started: "2026-08-22T21:59:06Z"
+completed: "2026-08-22T22:02:02Z"
 ---
 
 # dark-factory infra-tier handler

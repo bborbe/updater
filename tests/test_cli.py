@@ -2194,3 +2194,29 @@ class TestMainUpdaterAsync:
             pytest.raises(SystemExit),
         ):
             await main_updater_async()
+
+    @pytest.mark.asyncio
+    async def test_dark_factory_subcommand_dispatch(self, tmp_path, reset_config):
+        """Test 'dark-factory' dispatches to the handler with the parsed args."""
+        with (
+            patch(
+                "sys.argv",
+                [
+                    "updater",
+                    "dark-factory",
+                    str(tmp_path),
+                    "--dry-run",
+                    "--claude-yolo-tag",
+                    "v0.16.0",
+                ],
+            ),
+            patch("updater.cli.DarkFactoryHandler") as mock_handler,
+            patch("builtins.print"),
+        ):
+            mock_handler.return_value.run.return_value = 0
+            exit_code = await main_updater_async()
+
+        assert exit_code == 0
+        mock_handler.return_value.run.assert_called_once_with(
+            Path(str(tmp_path)), dry_run=True, claude_yolo_tag="v0.16.0"
+        )

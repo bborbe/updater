@@ -11,6 +11,7 @@ from . import config
 from .claude_analyzer import verify_claude_auth
 from .claude_metrics import metrics
 from .claude_yolo_handler import ClaudeYoloHandler
+from .dark_factory_handler import DarkFactoryHandler
 from .docker_updater import update_dockerfile_images
 from .file_utils import condense_file_list
 from .git_operations import (
@@ -2040,6 +2041,21 @@ async def main_updater_async() -> int:
         help="Target Go version to set in ARG GO_VERSION (e.g. 1.28.0)",
     )
 
+    sub = subparsers.add_parser(
+        "dark-factory",
+        help="Bump DefaultContainerImage in bborbe/dark-factory pkg/const.go and open a PR",
+    )
+    sub.add_argument("path", help="Path to the bborbe/dark-factory checkout")
+    sub.add_argument(
+        "--dry-run", action="store_true", help="Show the diff and exit without opening a PR"
+    )
+    sub.add_argument(
+        "--claude-yolo-tag",
+        default=None,
+        metavar="TAG",
+        help="Target claude-yolo release tag (e.g. v0.16.0); defaults to claude-yolo's latest GitHub release",
+    )
+
     args = parser.parse_args()
 
     if args.subcommand is None:
@@ -2079,8 +2095,12 @@ async def main_updater_async() -> int:
         return ClaudeYoloHandler().run(
             Path(args.path), dry_run=args.dry_run, go_version=args.go_version
         )
+    elif args.subcommand == "dark-factory":
+        return DarkFactoryHandler().run(
+            Path(args.path), dry_run=args.dry_run, claude_yolo_tag=args.claude_yolo_tag
+        )
     else:
-        valid = ", ".join([*_sub_descs.keys(), "claude-yolo"])
+        valid = ", ".join([*_sub_descs.keys(), "claude-yolo", "dark-factory"])
         print(f"✗ Unknown subcommand: {args.subcommand!r}. Valid subcommands: {valid}")
         return 1
 
