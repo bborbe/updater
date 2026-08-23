@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## Unreleased
+## v0.25.0
 
 - feat: Add infra-tier chain (updater chain) — state machine orchestrating claude-yolo → manifest-verify → dark-factory → bundlewrap + trading in runbook order
 - test: Add managed-chain integration suite (tests/test_chain_integration.py) driving the real InfraChain.run() with stubbed handlers + fake clock — locks down the state sequence, manifest-gate retry/abort, parallel tail, dry-run plan output, and the gh/docker shell-command boundary
