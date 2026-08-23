@@ -1,8 +1,9 @@
 ---
-status: prompted
+status: verifying
 approved: "2026-08-23T14:23:38Z"
 generating: "2026-08-23T14:49:19Z"
 prompted: "2026-08-23T14:49:19Z"
+verifying: "2026-08-23T15:05:07Z"
 branch: dark-factory/digest-weekly
 ---
 

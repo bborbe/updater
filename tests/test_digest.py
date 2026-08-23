@@ -301,6 +301,28 @@ def test_rate_limit_exhausted_raises(tmp_path):
     assert "rate limit" in str(exc_info.value)
 
 
+def test_run_id_containing_429_in_stdout_is_not_rate_limit(tmp_path):
+    """Test a run ID like .../runs/22642940905 in stdout is NOT a rate limit.
+
+    Regression: RATE_LIMIT_RE matches bare 403|429 anywhere, and gh run list JSON
+    legitimately contains run IDs with 429 — a healthy query was misclassified as
+    rate-limited and degraded instead of returning data. Detection now checks stderr
+    only (gh/git errors go to stderr; data goes to stdout).
+    """
+    messages, log_side_effect = _capture_messages()
+    healthy = _completed(
+        0,
+        stdout='[{"name":"CI","url":"https://github.com/bborbe/a/actions/runs/22642940905"}]',
+    )
+    with patch("updater.digest.subprocess.run", return_value=healthy):
+        stdout = _run_query(
+            "gh run list", cwd=tmp_path, source="builds for bborbe/a", log_func=log_side_effect
+        )
+
+    assert "22642940905" in stdout
+    assert not any("rate limit" in m for m in messages)
+
+
 def test_query_parked_advisories(tmp_path):
     """Test park-list JSON files yield one advisory per park action with repo=file stem."""
     (tmp_path / "bborbe-a.json").write_text(

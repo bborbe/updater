@@ -140,7 +140,7 @@ def _run_query(
                 source, f"{cmd} timed out after {QUERY_TIMEOUT_SECONDS}s"
             ) from None
 
-        if RATE_LIMIT_RE.search((result.stdout or "") + (result.stderr or "")):
+        if RATE_LIMIT_RE.search(result.stderr or ""):
             if attempt < RATE_LIMIT_RETRIES:
                 delay = 1.0 + random.uniform(0.0, 2.0)
                 log_func(f"rate limit on {source}; backing off {delay:.0f}s", to_console=True)
