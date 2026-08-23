@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## Unreleased
+
+- feat: Add weekly Go-update digest (updater digest) — fleet source queries (tags, head:updater PRs, failed builds, park list, human_review tasks, chain-abort logs), summary + exceptions rendering, --since/--until window, --dry-run no-send
+- feat: Add weekly digest delivery and cadence — email via gog by default (Slack webhook if configured), one-message-per-week idempotency via a delivery log, --schedule installs the weekly cron entry
+
 ## v0.25.0
 
 - feat: Add infra-tier chain (updater chain) — state machine orchestrating claude-yolo → manifest-verify → dark-factory → bundlewrap + trading in runbook order

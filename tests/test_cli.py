@@ -1,7 +1,7 @@
 """Tests for CLI orchestration and workflow."""
 
 from pathlib import Path
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
@@ -2345,3 +2345,102 @@ class TestMainUpdaterChain:
             pytest.raises(SystemExit),
         ):
             await main_updater_async()
+
+
+class TestMainUpdaterDigest:
+    """Tests for the 'digest' subcommand dispatch in main_updater_async."""
+
+    @pytest.mark.asyncio
+    async def test_digest_subcommand_dispatch_dry_run(self, reset_config):
+        """Test 'digest --dry-run' builds Digest with the default window and dry_run=True."""
+        with (
+            patch("sys.argv", ["updater", "digest", "--dry-run"]),
+            patch("updater.cli.Digest") as mock_digest,
+            patch(
+                "updater.cli.default_week_window",
+                return_value=("2026-08-14", "2026-08-21"),
+            ),
+            patch("builtins.print"),
+        ):
+            mock_digest.return_value.run = Mock(return_value=0)
+            exit_code = await main_updater_async()
+
+        assert exit_code == 0
+        mock_digest.assert_called_once_with(
+            since="2026-08-14",
+            until="2026-08-21",
+            dry_run=True,
+            workdir=Path.cwd(),
+        )
+        mock_digest.return_value.run.assert_called_once_with()
+
+    @pytest.mark.asyncio
+    async def test_digest_subcommand_dispatch_custom_window(self, reset_config):
+        """Test 'digest --since/--until' passes the custom window through."""
+        with (
+            patch(
+                "sys.argv",
+                ["updater", "digest", "--since", "2026-08-01", "--until", "2026-08-07"],
+            ),
+            patch("updater.cli.Digest") as mock_digest,
+            patch(
+                "updater.cli.default_week_window",
+                return_value=("2026-08-14", "2026-08-21"),
+            ),
+            patch("builtins.print"),
+        ):
+            mock_digest.return_value.run = Mock(return_value=0)
+            exit_code = await main_updater_async()
+
+        assert exit_code == 0
+        mock_digest.assert_called_once_with(
+            since="2026-08-01",
+            until="2026-08-07",
+            dry_run=False,
+            workdir=Path.cwd(),
+        )
+        mock_digest.return_value.run.assert_called_once_with()
+
+    @pytest.mark.asyncio
+    async def test_digest_subcommand_dispatch_default_no_dry_run(self, reset_config):
+        """Test bare 'digest' builds Digest with dry_run=False and the default window."""
+        with (
+            patch("sys.argv", ["updater", "digest"]),
+            patch("updater.cli.Digest") as mock_digest,
+            patch(
+                "updater.cli.default_week_window",
+                return_value=("2026-08-14", "2026-08-21"),
+            ),
+            patch("builtins.print"),
+        ):
+            mock_digest.return_value.run = Mock(return_value=0)
+            exit_code = await main_updater_async()
+
+        assert exit_code == 0
+        mock_digest.assert_called_once_with(
+            since="2026-08-14",
+            until="2026-08-21",
+            dry_run=False,
+            workdir=Path.cwd(),
+        )
+        mock_digest.return_value.run.assert_called_once_with()
+
+    @pytest.mark.asyncio
+    async def test_digest_subcommand_schedule(self, reset_config):
+        """Test 'digest --schedule' installs the weekly cron entry without rendering."""
+        with (
+            patch("sys.argv", ["updater", "digest", "--schedule"]),
+            patch("updater.cli.install_weekly_schedule", return_value=True) as mock_install,
+            patch("updater.cli.Digest") as mock_digest,
+            patch("builtins.print"),
+        ):
+            exit_code = await main_updater_async()
+
+        assert exit_code == 0
+        log_dir = config.DIGEST_DELIVERY_LOG_DIR or Path.cwd() / config.LOG_DIR_NAME / "digest"
+        mock_install.assert_called_once_with(
+            cron_schedule=config.DIGEST_WEEKLY_CRON,
+            command="updater digest",
+            log_path=str(log_dir / "digest-cron.log"),
+        )
+        mock_digest.assert_not_called()

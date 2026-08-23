@@ -14,6 +14,8 @@ from .claude_analyzer import verify_claude_auth
 from .claude_metrics import metrics
 from .claude_yolo_handler import ClaudeYoloHandler
 from .dark_factory_handler import DarkFactoryHandler
+from .digest import Digest, default_week_window
+from .digest_delivery import install_weekly_schedule
 from .docker_updater import update_dockerfile_images
 from .file_utils import condense_file_list
 from .git_operations import (
@@ -2125,6 +2127,33 @@ async def main_updater_async() -> int:
     ):
         sub.add_argument(flag, metavar="PATH", help=help_text)
 
+    sub = subparsers.add_parser(
+        "digest",
+        help="Render the weekly Go-update digest (versions bumped, PRs, releases, exceptions)",
+    )
+    sub.add_argument(
+        "--since",
+        default=None,
+        metavar="YYYY-MM-DD",
+        help="Window start (inclusive); default: 7 days ago",
+    )
+    sub.add_argument(
+        "--until",
+        default=None,
+        metavar="YYYY-MM-DD",
+        help="Window end (inclusive); default: today",
+    )
+    sub.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Print the digest to the console and send nothing",
+    )
+    sub.add_argument(
+        "--schedule",
+        action="store_true",
+        help="Install the weekly cron entry (default Monday 09:00) idempotently and exit",
+    )
+
     args = parser.parse_args()
 
     if args.subcommand is None:
@@ -2185,6 +2214,26 @@ async def main_updater_async() -> int:
             bundlewrap_checkout=Path(args.bundlewrap) if args.bundlewrap else None,
             trading_checkout=Path(args.trading) if args.trading else None,
         ).run()
+    elif args.subcommand == "digest":
+        if args.schedule:
+            log_dir = config.DIGEST_DELIVERY_LOG_DIR or Path.cwd() / config.LOG_DIR_NAME / "digest"
+            ok = install_weekly_schedule(
+                cron_schedule=config.DIGEST_WEEKLY_CRON,
+                command="updater digest",
+                log_path=str(log_dir / "digest-cron.log"),
+            )
+            return 0 if ok else 1
+        since, until = default_week_window()
+        if args.since:
+            since = args.since
+        if args.until:
+            until = args.until
+        return Digest(
+            since=since,
+            until=until,
+            dry_run=args.dry_run,
+            workdir=Path.cwd(),
+        ).run()
     else:
         valid = ", ".join(
             [
@@ -2194,6 +2243,7 @@ async def main_updater_async() -> int:
                 "bundlewrap",
                 "trading",
                 "chain",
+                "digest",
             ]
         )
         print(f"✗ Unknown subcommand: {args.subcommand!r}. Valid subcommands: {valid}")
