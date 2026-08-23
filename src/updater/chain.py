@@ -60,7 +60,7 @@ class ChainAbort(Exception):
     """Raised to abort the chain, naming the step that failed."""
 
     def __init__(self, step: ChainStep, message: str) -> None:
-        self.step = step
+        self._step = step
         super().__init__(f"{step.value}: {message}")
 
 
@@ -287,17 +287,17 @@ class InfraChain:
             sleep: Sleep function (test seam)
         """
         self._state: ChainState | None = None
-        self.go_version = go_version
-        self.dry_run = dry_run
-        self.claude_yolo_checkout = claude_yolo_checkout
-        self.dark_factory_checkout = dark_factory_checkout
-        self.bundlewrap_checkout = bundlewrap_checkout
-        self.trading_checkout = trading_checkout
-        self.pr_merge_interval = pr_merge_interval
-        self.manifest_interval = manifest_interval
-        self.manifest_timeout = manifest_timeout
-        self.now = now
-        self.sleep = sleep
+        self._go_version = go_version
+        self._dry_run = dry_run
+        self._claude_yolo_checkout = claude_yolo_checkout
+        self._dark_factory_checkout = dark_factory_checkout
+        self._bundlewrap_checkout = bundlewrap_checkout
+        self._trading_checkout = trading_checkout
+        self._pr_merge_interval = pr_merge_interval
+        self._manifest_interval = manifest_interval
+        self._manifest_timeout = manifest_timeout
+        self._now = now
+        self._sleep = sleep
 
     def plan(self) -> list[str]:
         """Return the fixed ordered step names (the state machine never reorders)."""
@@ -343,15 +343,15 @@ class InfraChain:
         Returns:
             Exit code: 0 on success, 1 on validation failure or chain abort
         """
-        if not validate_go_version(self.go_version):
+        if not validate_go_version(self._go_version):
             log_message(
-                f"✗ Invalid Go version: {self.go_version!r} (expected X.Y.Z)", to_console=True
+                f"✗ Invalid Go version: {self._go_version!r} (expected X.Y.Z)", to_console=True
             )
             return 1
 
         self._set_state(ChainState.START)
 
-        if self.dry_run:
+        if self._dry_run:
             self._print_plan()
             self._set_state(ChainState.DONE)
             return 0
@@ -359,10 +359,10 @@ class InfraChain:
         missing = [
             name
             for name, checkout in (
-                ("claude-yolo", self.claude_yolo_checkout),
-                ("dark-factory", self.dark_factory_checkout),
-                ("bundlewrap", self.bundlewrap_checkout),
-                ("trading", self.trading_checkout),
+                ("claude-yolo", self._claude_yolo_checkout),
+                ("dark-factory", self._dark_factory_checkout),
+                ("bundlewrap", self._bundlewrap_checkout),
+                ("trading", self._trading_checkout),
             )
             if checkout is None
         ]
@@ -373,29 +373,29 @@ class InfraChain:
             )
             return 1
 
-        assert self.claude_yolo_checkout is not None
-        assert self.dark_factory_checkout is not None
-        assert self.bundlewrap_checkout is not None
-        assert self.trading_checkout is not None
+        assert self._claude_yolo_checkout is not None
+        assert self._dark_factory_checkout is not None
+        assert self._bundlewrap_checkout is not None
+        assert self._trading_checkout is not None
 
         try:
             self._set_state(ChainState.CLAUDE_YOLO)
             rc = ClaudeYoloHandler().run(
-                self.claude_yolo_checkout, dry_run=False, go_version=self.go_version
+                self._claude_yolo_checkout, dry_run=False, go_version=self._go_version
             )
             if rc != 0:
                 raise ChainAbort(ChainStep.CLAUDE_YOLO, f"claude-yolo handler exited {rc}")
 
             self._set_state(ChainState.WAITING_PR_MERGE)
             wait_for_pr_merge(
-                self.claude_yolo_checkout,
-                interval=self.pr_merge_interval,
-                sleep=self.sleep,
+                self._claude_yolo_checkout,
+                interval=self._pr_merge_interval,
+                sleep=self._sleep,
                 log_func=log_message,
             )
 
             self._set_state(ChainState.WAITING_PUBLISH)
-            tag = resolve_latest_claude_yolo_tag(self.claude_yolo_checkout)
+            tag = resolve_latest_claude_yolo_tag(self._claude_yolo_checkout)
 
             self._set_state(ChainState.MANIFEST_GATE)
             if not _docker_available(log_func=log_message):
@@ -404,18 +404,18 @@ class InfraChain:
                     "docker not available — install docker or run where available",
                 )
             wait_for_manifest(
-                self.claude_yolo_checkout,
+                self._claude_yolo_checkout,
                 f"{MANIFEST_IMAGE_PREFIX}{tag}",
-                interval=self.manifest_interval,
-                timeout=self.manifest_timeout,
-                now=self.now,
-                sleep=self.sleep,
+                interval=self._manifest_interval,
+                timeout=self._manifest_timeout,
+                now=self._now,
+                sleep=self._sleep,
                 log_func=log_message,
             )
 
             self._set_state(ChainState.DARK_FACTORY)
             rc = DarkFactoryHandler().run(
-                self.dark_factory_checkout, dry_run=False, claude_yolo_tag=tag
+                self._dark_factory_checkout, dry_run=False, claude_yolo_tag=tag
             )
             if rc != 0:
                 raise ChainAbort(ChainStep.DARK_FACTORY, f"dark-factory handler exited {rc}")
@@ -437,7 +437,7 @@ class InfraChain:
             self._set_state(ChainState.DONE)
             return 0
         except ChainAbort as e:
-            log_message(f"✗ Chain aborted at step {e.step.value}: {e}", to_console=True)
+            log_message(f"✗ Chain aborted at step {e._step.value}: {e}", to_console=True)
             return 1
         except (RuntimeError, InfraTargetError) as e:
             log_message(
@@ -448,14 +448,14 @@ class InfraChain:
 
     def _run_bundlewrap(self) -> int:
         """Run the BundleWrap handler; invoked in a worker thread."""
-        assert self.bundlewrap_checkout is not None
+        assert self._bundlewrap_checkout is not None
         return BundleWrapHandler().run(
-            self.bundlewrap_checkout, dry_run=False, go_version=self.go_version
+            self._bundlewrap_checkout, dry_run=False, go_version=self._go_version
         )
 
     def _run_trading(self) -> int:
         """Run the trading handler; invoked in a worker thread."""
-        assert self.trading_checkout is not None
+        assert self._trading_checkout is not None
         return TradingHandler().run(
-            self.trading_checkout, dry_run=False, go_version=self.go_version
+            self._trading_checkout, dry_run=False, go_version=self._go_version
         )
