@@ -2,6 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
+## Unreleased
+
+- feat: Add infra-tier chain (updater chain) — state machine orchestrating claude-yolo → manifest-verify → dark-factory → bundlewrap + trading in runbook order
+
 ## v0.24.0
 
 - feat: Add infra-tier claude-yolo handler (updater claude-yolo) and the shared patch-and-PR helper reused by the other infra-tier handlers
