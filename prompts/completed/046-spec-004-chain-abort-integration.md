@@ -1,8 +1,13 @@
 ---
-status: approved
+status: completed
 spec: [004-infra-tier-state-machine]
+summary: Added tests/test_chain_integration.py — in-process managed-chain integration suite driving the real InfraChain.run() with stubbed handlers and a fake clock, locking down the state sequence, manifest-gate retry/abort (including the 30-min timeout naming manifest-verify), handler-failure aborts, the parallel tail, the exact dry-run plan output, and the gh/docker shell-command boundary, plus contract-preservation guards that chain.py consumes the handler classes and their keyword-only dry_run signatures remain intact.
+execution_id: updater-exec-046-spec-004-chain-abort-integration
+dark-factory-version: dev
 created: "2026-08-23T11:06:36Z"
 queued: "2026-08-23T11:16:19Z"
+started: "2026-08-23T11:23:09Z"
+completed: "2026-08-23T11:26:22Z"
 ---
 
 # Infra-tier chain: managed-chain integration tests for ordering, dry-run output, and abort paths
