@@ -1,8 +1,9 @@
 ---
-status: prompted
+status: verifying
 approved: "2026-08-23T11:00:45Z"
 generating: "2026-08-23T11:16:19Z"
 prompted: "2026-08-23T11:16:19Z"
+verifying: "2026-08-23T11:26:22Z"
 branch: dark-factory/infra-tier-state-machine
 ---
 
