@@ -2424,3 +2424,23 @@ class TestMainUpdaterDigest:
             workdir=Path.cwd(),
         )
         mock_digest.return_value.run.assert_called_once_with()
+
+    @pytest.mark.asyncio
+    async def test_digest_subcommand_schedule(self, reset_config):
+        """Test 'digest --schedule' installs the weekly cron entry without rendering."""
+        with (
+            patch("sys.argv", ["updater", "digest", "--schedule"]),
+            patch("updater.cli.install_weekly_schedule", return_value=True) as mock_install,
+            patch("updater.cli.Digest") as mock_digest,
+            patch("builtins.print"),
+        ):
+            exit_code = await main_updater_async()
+
+        assert exit_code == 0
+        log_dir = config.DIGEST_DELIVERY_LOG_DIR or Path.cwd() / config.LOG_DIR_NAME / "digest"
+        mock_install.assert_called_once_with(
+            cron_schedule=config.DIGEST_WEEKLY_CRON,
+            command="updater digest",
+            log_path=str(log_dir / "digest-cron.log"),
+        )
+        mock_digest.assert_not_called()

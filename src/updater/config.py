@@ -52,3 +52,11 @@ DIGEST_HUMAN_REVIEW_DIRS: list[Path] = [
     Path.home() / "Documents/Obsidian/Personal/24 Tasks",
     Path.home() / "Documents/Obsidian/OpenClaw/tasks",
 ]
+
+# Weekly digest delivery configuration
+DIGEST_EMAIL_TO: str = ""  # recipient for the weekly digest email (gog gmail send --to; gog auto-selects the send-as account)
+DIGEST_SLACK_WEBHOOK: str | None = None  # when set, digest delivers to Slack instead of email
+DIGEST_DELIVERY_LOG_DIR: Path | None = (
+    None  # delivery markers; default <workdir>/.update-logs/digest
+)
+DIGEST_WEEKLY_CRON: str = "0 9 * * 1"  # Monday 09:00

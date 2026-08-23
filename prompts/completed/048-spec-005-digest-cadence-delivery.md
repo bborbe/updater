@@ -1,8 +1,13 @@
 ---
-status: approved
+status: completed
 spec: [005-digest-weekly]
+summary: Added weekly digest delivery and cadence — email (gog) by default / Slack webhook when configured, one-message-per-week idempotency via a delivery-log marker, and an idempotent --schedule cron installer
+execution_id: updater-exec-048-spec-005-digest-cadence-delivery
+dark-factory-version: dev
 created: "2026-08-23T16:35:00Z"
 queued: "2026-08-23T14:49:19Z"
+started: "2026-08-23T15:00:26Z"
+completed: "2026-08-23T15:05:07Z"
 ---
 
 # Weekly digest cadence and delivery

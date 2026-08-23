@@ -19,6 +19,7 @@ from pathlib import Path
 import yaml
 
 from . import config
+from .digest_delivery import DeliveryError, DigestDelivery
 from .log_manager import log_message
 
 WEEK_WINDOW_DAYS = 7
@@ -598,12 +599,17 @@ class Digest:
         workdir: Path | None = None,
         park_list_dir: Path | None = None,
         human_review_dirs: list[Path] | None = None,
+        email_to: str | None = None,
+        slack_webhook: str | None = None,
+        delivery_log_dir: Path | None = None,
     ) -> None:
         """Initialize the digest.
 
         The repos/workdir/park_list_dir/human_review_dirs parameters are the
         testability seam — tests pass explicit tiny fleets and tmp dirs. They
-        are not CLI flags.
+        are not CLI flags. The email_to/slack_webhook/delivery_log_dir
+        parameters default from config so the CLI's Digest(...) call stays
+        unchanged.
 
         Args:
             since: Inclusive window start (YYYY-MM-DD)
@@ -613,6 +619,10 @@ class Digest:
             workdir: Working directory for queries; defaults to cwd
             park_list_dir: Park-list directory; defaults to config.DIGEST_PARK_LIST_DIR
             human_review_dirs: Task directories; defaults to config.DIGEST_HUMAN_REVIEW_DIRS
+            email_to: Delivery recipient; defaults to config.DIGEST_EMAIL_TO
+            slack_webhook: Slack webhook when configured; defaults to config.DIGEST_SLACK_WEBHOOK
+            delivery_log_dir: Delivery-marker dir; defaults to
+                <workdir>/.update-logs/digest
         """
         self._since = since
         self._until = until
@@ -626,6 +636,15 @@ class Digest:
             list(human_review_dirs)
             if human_review_dirs is not None
             else list(config.DIGEST_HUMAN_REVIEW_DIRS)
+        )
+        self._email_to = config.DIGEST_EMAIL_TO if email_to is None else email_to
+        self._slack_webhook = (
+            config.DIGEST_SLACK_WEBHOOK if slack_webhook is None else slack_webhook
+        )
+        self._delivery_log_dir = (
+            (config.DIGEST_DELIVERY_LOG_DIR or self._workdir / config.LOG_DIR_NAME / "digest")
+            if delivery_log_dir is None
+            else delivery_log_dir
         )
         self._errors: list[str] = []
 
@@ -793,10 +812,17 @@ class Digest:
         return "\n".join(lines)
 
     def run(self) -> int:
-        """Validate, render, and print the digest (the CLI entry).
+        """Validate, render, and deliver the digest (the CLI entry).
+
+        Dry-run prints the full digest and sends nothing. A real run delivers
+        once per week over the configured channel: the delivery marker is
+        written only after a successful send, so re-running the same week
+        skips and a failed send (exit 1, digest printed above the note) is
+        retried on the next run.
 
         Returns:
-            Exit code: 0 on success, 1 on invalid date range or empty fleet
+            Exit code: 0 on success, 1 on invalid date range, empty fleet, or
+                delivery failure
         """
         if not validate_date(self._since) or not validate_date(self._until):
             log_message(
@@ -807,5 +833,35 @@ class Digest:
         if not self._repos:
             log_message("✗ Empty fleet — check config.DIGEST_FLEET_REPOS", to_console=True)
             return 1
-        log_message(self.render(), to_console=True)
+        text = self.render()
+        if self._dry_run:
+            log_message(text, to_console=True)
+            return 0
+
+        delivery = DigestDelivery(
+            since=self._since,
+            until=self._until,
+            delivery_log_dir=self._delivery_log_dir,
+            email_to=self._email_to,
+            slack_webhook=self._slack_webhook,
+        )
+        if delivery.already_delivered():
+            log_message(
+                f"digest already delivered for week {self._since}..{self._until} — skipping (idempotent)",
+                to_console=True,
+            )
+            return 0
+        subject = f"Weekly Go Update Digest {self._since}..{self._until}"
+        try:
+            delivery.deliver(subject, text)
+            delivery.record_delivery()
+        except DeliveryError as e:
+            log_message(text, to_console=True)
+            log_message(
+                f"✗ digest delivery failed ({e.channel}): {e} — digest printed above; "
+                "fix the channel config and re-run",
+                to_console=True,
+            )
+            return 1
+        log_message(f"digest delivered via {delivery.channel}", to_console=True)
         return 0
