@@ -9,6 +9,7 @@ from pathlib import Path
 
 from . import config
 from .bundlewrap_handler import BundleWrapHandler
+from .chain import InfraChain
 from .claude_analyzer import verify_claude_auth
 from .claude_metrics import metrics
 from .claude_yolo_handler import ClaudeYoloHandler
@@ -2088,6 +2089,42 @@ async def main_updater_async() -> int:
         help="Target Go version to set in Makefile.folder (e.g. 1.28.0)",
     )
 
+    sub = subparsers.add_parser(
+        "chain",
+        help="Run the full infra-tier chain: claude-yolo → manifest-verify → "
+        "dark-factory → bundlewrap + trading",
+    )
+    sub.add_argument(
+        "--go-version",
+        required=True,
+        metavar="X.Y.Z",
+        help="Target Go version (e.g. 1.28.0)",
+    )
+    sub.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Print the planned sequence and exit without invoking any handler",
+    )
+    for flag, help_text in (
+        (
+            "--claude-yolo",
+            "Path to the bborbe/claude-yolo checkout (required for a real run)",
+        ),
+        (
+            "--dark-factory",
+            "Path to the bborbe/dark-factory checkout (required for a real run)",
+        ),
+        (
+            "--bundlewrap",
+            "Path to the BundleWrap checkout (required for a real run)",
+        ),
+        (
+            "--trading",
+            "Path to the bborbe/trading checkout (required for a real run)",
+        ),
+    ):
+        sub.add_argument(flag, metavar="PATH", help=help_text)
+
     args = parser.parse_args()
 
     if args.subcommand is None:
@@ -2139,9 +2176,25 @@ async def main_updater_async() -> int:
         return TradingHandler().run(
             Path(args.path), dry_run=args.dry_run, go_version=args.go_version
         )
+    elif args.subcommand == "chain":
+        return await InfraChain(
+            go_version=args.go_version,
+            dry_run=args.dry_run,
+            claude_yolo_checkout=Path(args.claude_yolo) if args.claude_yolo else None,
+            dark_factory_checkout=Path(args.dark_factory) if args.dark_factory else None,
+            bundlewrap_checkout=Path(args.bundlewrap) if args.bundlewrap else None,
+            trading_checkout=Path(args.trading) if args.trading else None,
+        ).run()
     else:
         valid = ", ".join(
-            [*_sub_descs.keys(), "claude-yolo", "dark-factory", "bundlewrap", "trading"]
+            [
+                *_sub_descs.keys(),
+                "claude-yolo",
+                "dark-factory",
+                "bundlewrap",
+                "trading",
+                "chain",
+            ]
         )
         print(f"✗ Unknown subcommand: {args.subcommand!r}. Valid subcommands: {valid}")
         return 1

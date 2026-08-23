@@ -2272,3 +2272,76 @@ class TestMainUpdaterAsync:
         mock_handler.return_value.run.assert_called_once_with(
             Path(str(tmp_path)), dry_run=True, go_version="1.28.0"
         )
+
+
+class TestMainUpdaterChain:
+    """Tests for the 'chain' subcommand dispatch in main_updater_async."""
+
+    @pytest.mark.asyncio
+    async def test_chain_subcommand_dispatch_dry_run(self, tmp_path, reset_config):
+        """Test 'chain --dry-run' builds InfraChain with no checkouts and awaits run."""
+        with (
+            patch("sys.argv", ["updater", "chain", "--dry-run", "--go-version", "1.28.0"]),
+            patch("updater.cli.InfraChain") as mock_chain,
+            patch("builtins.print"),
+        ):
+            mock_chain.return_value.run = AsyncMock(return_value=0)
+            exit_code = await main_updater_async()
+
+        assert exit_code == 0
+        mock_chain.assert_called_once_with(
+            go_version="1.28.0",
+            dry_run=True,
+            claude_yolo_checkout=None,
+            dark_factory_checkout=None,
+            bundlewrap_checkout=None,
+            trading_checkout=None,
+        )
+        mock_chain.return_value.run.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_chain_subcommand_dispatch_real_paths(self, tmp_path, reset_config):
+        """Test 'chain' with checkout flags builds InfraChain with Path objects."""
+        with (
+            patch(
+                "sys.argv",
+                [
+                    "updater",
+                    "chain",
+                    "--go-version",
+                    "1.28.0",
+                    "--claude-yolo",
+                    str(tmp_path),
+                    "--dark-factory",
+                    str(tmp_path),
+                    "--bundlewrap",
+                    str(tmp_path),
+                    "--trading",
+                    str(tmp_path),
+                ],
+            ),
+            patch("updater.cli.InfraChain") as mock_chain,
+            patch("builtins.print"),
+        ):
+            mock_chain.return_value.run = AsyncMock(return_value=0)
+            exit_code = await main_updater_async()
+
+        assert exit_code == 0
+        mock_chain.assert_called_once_with(
+            go_version="1.28.0",
+            dry_run=False,
+            claude_yolo_checkout=tmp_path,
+            dark_factory_checkout=tmp_path,
+            bundlewrap_checkout=tmp_path,
+            trading_checkout=tmp_path,
+        )
+
+    @pytest.mark.asyncio
+    async def test_chain_subcommand_requires_go_version(self, reset_config):
+        """Test 'chain' without --go-version exits via argparse SystemExit."""
+        with (
+            patch("sys.argv", ["updater", "chain"]),
+            patch("builtins.print"),
+            pytest.raises(SystemExit),
+        ):
+            await main_updater_async()
