@@ -2,6 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
+## Unreleased
+
+- docs: Remove the dark-factory approval gate from this repo's `CLAUDE.md`. It contradicted the global `execution-phase-no-reask` carve-out and would have stopped every spec and prompt approval.
+
 ## v0.26.0
 
 - feat: Add weekly Go-update digest (updater digest) — fleet source queries (tags, head:updater PRs, failed builds, park list, human_review tasks, chain-abort logs), summary + exceptions rendering, --since/--until window, --dry-run no-send
