@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## Unreleased
+## v0.26.2
 
 - fix: repoint the `tests/test_version_updater.py` registry fixture at the live registry — `docker.quant.benjamin-borbe.de:443` is decommissioned (404), so the fixture now reads `docker.prod.nuke.benjamin-borbe.de:443`.
 
