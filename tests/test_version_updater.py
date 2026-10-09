@@ -339,7 +339,7 @@ def test_update_versions_registry_prefix(tmp_path):
     """Test update_versions with Dockerfile using ${DOCKER_REGISTRY}/ prefix."""
     dockerfile = tmp_path / "Dockerfile"
     dockerfile.write_text(
-        "ARG DOCKER_REGISTRY=docker.quant.benjamin-borbe.de:443\n"
+        "ARG DOCKER_REGISTRY=docker.prod.nuke.benjamin-borbe.de:443\n"
         "FROM ${DOCKER_REGISTRY}/golang:1.23.4 AS build\n"
         "FROM ${DOCKER_REGISTRY}/alpine:3.19 AS alpine\n"
     )
