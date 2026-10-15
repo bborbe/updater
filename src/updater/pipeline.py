@@ -34,7 +34,12 @@ from .git_operations import (
 )
 from .go_updater import clean_indirect_deps, fix_osv_vulnerabilities, update_go_dependencies
 from .go_updater import run_precommit as run_go_precommit
-from .gomod_excludes import apply_gomod_excludes_and_replaces
+from .gomod_excludes import (
+    STRUCTURED_MERGE_DIFF_V7_EXCLUDE,
+    apply_gomod_excludes_and_replaces,
+    drop_exclude,
+    is_exclude_conflict,
+)
 from .log_manager import log_message, run_command
 from .module_config import ModuleConfig, is_disabled, load_module_config
 from .prompts import prompt_yes_no
@@ -124,7 +129,26 @@ class GoDepUpdateStep(Step):
         if is_disabled(module_config, "go-dependencies"):
             log_message("  → Skipping Go dependency update (disabled by config)", to_console=True)
             return StepResult(StepStatus.SKIP)
-        updates = update_go_dependencies(module_path, log_func=log_message)
+        try:
+            updates = update_go_dependencies(module_path, log_func=log_message)
+        except RuntimeError as exc:
+            if not is_exclude_conflict(str(exc)):
+                raise
+            try:
+                dropped = drop_exclude(
+                    module_path, STRUCTURED_MERGE_DIFF_V7_EXCLUDE, log_func=log_message
+                )
+            except RuntimeError:
+                # The back-off itself failed — surface the original update failure.
+                raise exc from None
+            if not dropped:
+                raise
+            log_message(
+                "  → The structured-merge-diff v7 exclude removed a package this module's "
+                "graph imports; dropped the exclude and retrying the update once",
+                to_console=True,
+            )
+            updates = update_go_dependencies(module_path, log_func=log_message)
         context.setdefault("updates_made", False)
         context["updates_made"] = context["updates_made"] or updates
         return StepResult(StepStatus.SUCCESS, {"changes": updates})

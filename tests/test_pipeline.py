@@ -14,6 +14,7 @@ from updater.pipeline import (
     GitPushStep,
     GitSyncStep,
     GoDepSkipStep,
+    GoDepUpdateStep,
     Pipeline,
     PrecommitStep,
     PythonDepUpdateStep,
@@ -786,3 +787,96 @@ async def test_changelog_step_llm_disabled_preserves_unreleased(tmp_path):
     content = changelog.read_text()
     assert "## Unreleased" in content
     assert "- keep me" in content
+
+
+# ---------------------------------------------------------------------------
+# GoDepUpdateStep — exclude-conflict back-off branches
+# ---------------------------------------------------------------------------
+
+_V7_CONFLICT_TEXT = (
+    "sigs.k8s.io/structured-merge-diff/v7/merge: cannot find module providing "
+    "package sigs.k8s.io/structured-merge-diff/v7/merge"
+)
+
+
+async def test_go_dep_update_step_success_calls_update_once(tmp_path):
+    """A clean run reports SUCCESS and calls update_go_dependencies exactly once."""
+    with (
+        patch("updater.pipeline.update_go_dependencies", return_value=True) as mock_update,
+        patch("updater.pipeline.drop_exclude") as mock_drop,
+        patch("updater.pipeline.log_message"),
+    ):
+        result = await GoDepUpdateStep().run(tmp_path, {})
+
+    assert result.status == StepStatus.SUCCESS
+    assert mock_update.call_count == 1
+    mock_drop.assert_not_called()
+
+
+async def test_go_dep_update_step_reraises_non_matching_error(tmp_path):
+    """A RuntimeError that is not the exclude conflict propagates unchanged."""
+    with (
+        patch(
+            "updater.pipeline.update_go_dependencies",
+            side_effect=RuntimeError("some unrelated failure"),
+        ) as mock_update,
+        patch("updater.pipeline.log_message"),
+        pytest.raises(RuntimeError),
+    ):
+        await GoDepUpdateStep().run(tmp_path, {})
+
+    assert mock_update.call_count == 1
+
+
+async def test_go_dep_update_step_reraises_when_exclude_absent(tmp_path):
+    """A matching conflict with no exclude to drop propagates unchanged."""
+    with (
+        patch(
+            "updater.pipeline.update_go_dependencies",
+            side_effect=RuntimeError(_V7_CONFLICT_TEXT),
+        ) as mock_update,
+        patch("updater.pipeline.drop_exclude", return_value=False),
+        patch("updater.pipeline.log_message"),
+        pytest.raises(RuntimeError),
+    ):
+        await GoDepUpdateStep().run(tmp_path, {})
+
+    assert mock_update.call_count == 1
+
+
+async def test_go_dep_update_step_reraises_when_drop_exclude_raises(tmp_path):
+    """A failure inside drop_exclude propagates the original exception."""
+    with (
+        patch(
+            "updater.pipeline.update_go_dependencies",
+            side_effect=RuntimeError(_V7_CONFLICT_TEXT),
+        ) as mock_update,
+        patch(
+            "updater.pipeline.drop_exclude",
+            side_effect=RuntimeError("go mod edit blew up"),
+        ),
+        patch("updater.pipeline.log_message"),
+        pytest.raises(RuntimeError, match="cannot find module providing package"),
+    ):
+        await GoDepUpdateStep().run(tmp_path, {})
+
+    assert mock_update.call_count == 1
+
+
+async def test_go_dep_update_step_reraises_when_retry_fails(tmp_path):
+    """A retry that fails again propagates and does not loop."""
+    with (
+        patch(
+            "updater.pipeline.update_go_dependencies",
+            side_effect=[
+                RuntimeError(_V7_CONFLICT_TEXT),
+                RuntimeError("retry also failed"),
+            ],
+        ) as mock_update,
+        patch("updater.pipeline.drop_exclude", return_value=True),
+        patch("updater.pipeline.log_message"),
+        pytest.raises(RuntimeError, match="retry also failed"),
+    ):
+        await GoDepUpdateStep().run(tmp_path, {})
+
+    assert mock_update.call_count == 2
