@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## Unreleased
+## v0.26.4
 
 - fix: back off the structured-merge-diff v7 exclude when a module's graph imports v7, so a sweep no longer aborts on it
 
