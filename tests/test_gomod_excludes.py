@@ -141,24 +141,28 @@ replace (
 
 
 def test_apply_excludes_to_empty_gomod(tmp_path, mocker):
-    """Test that a go.mod containing only a non-standard, non-obsolete exclude
-    produces no changes — nothing to add (STANDARD_EXCLUDES is empty) and nothing
-    to drop (cloud.google.com/go is not listed in OBSOLETE_EXCLUDES_PREFIXES)."""
+    """Test that a go.mod already carrying every STANDARD exclude produces no
+    changes — nothing to add, and nothing to drop (cloud.google.com/go is not
+    listed in OBSOLETE_EXCLUDES_PREFIXES)."""
     gomod = tmp_path / "go.mod"
-    gomod.write_text("module example.com/test\n\ngo 1.23\n\nexclude cloud.google.com/go v0.26.0\n")
+    gomod.write_text(
+        "module example.com/test\n\ngo 1.23\n\n"
+        "exclude cloud.google.com/go v0.26.0\n"
+        "exclude sigs.k8s.io/structured-merge-diff/v7 v7.0.0\n"
+    )
 
     # Mock run_command to avoid actual go mod edit calls
     mock_run = mocker.patch("updater.gomod_excludes.run_command")
 
     result = apply_gomod_excludes_and_replaces(tmp_path)
 
-    assert result is False  # Standard exclude already present, nothing to add
+    assert result is False  # Standard excludes already present, nothing to add
     assert mock_run.call_count == 0  # No commands run
 
 
 def test_apply_excludes_idempotent(tmp_path, mocker):
-    """Test that applying with all tools.go-era replaces present makes no changes
-    when tools.go exists (un-migrated project).
+    """Test that applying with all standard excludes and all tools.go-era replaces
+    present makes no changes when tools.go exists (un-migrated project).
     """
     gomod = tmp_path / "go.mod"
     content = """module example.com/test
@@ -166,6 +170,7 @@ def test_apply_excludes_idempotent(tmp_path, mocker):
 go 1.23
 
 exclude cloud.google.com/go v0.26.0
+exclude sigs.k8s.io/structured-merge-diff/v7 v7.0.0
 
 replace (
     github.com/charmbracelet/x/cellbuf => github.com/charmbracelet/x/cellbuf v0.0.15
@@ -190,7 +195,7 @@ def test_apply_removes_old_non_k8s_excludes(tmp_path, mocker):
     """Test that old non-k8s excludes are removed as obsolete.
 
     cloud.google.com/go@v0.26.0 is left untouched: it is neither a STANDARD
-    exclude (STANDARD_EXCLUDES is empty; nothing is added) nor listed in
+    exclude (it was dropped from STANDARD_EXCLUDES) nor listed in
     OBSOLETE_EXCLUDES_PREFIXES (nothing is actively removed).
     """
     gomod = tmp_path / "go.mod"
@@ -208,6 +213,7 @@ exclude (
     go.yaml.in/yaml/v3 v3.0.4
     golang.org/x/tools v0.38.0
     golang.org/x/tools v0.39.0
+    sigs.k8s.io/structured-merge-diff/v7 v7.0.0
 )
 """
     gomod.write_text(content)
@@ -224,7 +230,8 @@ exclude (
 
 
 def test_apply_does_not_add_cloud_google_exclude(tmp_path, mocker):
-    """Test that cloud.google.com/go is NOT added — STANDARD_EXCLUDES is empty."""
+    """Test that cloud.google.com/go is NOT added — it was dropped from
+    STANDARD_EXCLUDES and the only standard exclude is structured-merge-diff/v7."""
     gomod = tmp_path / "go.mod"
     gomod.write_text("module example.com/test\n\ngo 1.23\n")
 
@@ -232,10 +239,44 @@ def test_apply_does_not_add_cloud_google_exclude(tmp_path, mocker):
 
     result = apply_gomod_excludes_and_replaces(tmp_path)
 
-    assert result is False  # No changes — nothing to add
+    assert result is True  # The structured-merge-diff/v7 exclude is added
     calls = [str(c) for c in mock_run.call_args_list]
     assert not any("cloud.google.com/go" in c for c in calls)
-    assert not any("go mod download" in c for c in calls)
+
+
+def test_apply_adds_structured_merge_diff_v7_exclude(tmp_path, mocker):
+    """Test that the standard structured-merge-diff/v7 exclude is added to a
+    go.mod that lacks it, followed by go mod download."""
+    gomod = tmp_path / "go.mod"
+    gomod.write_text("module example.com/test\n\ngo 1.23\n")
+
+    mock_run = mocker.patch("updater.gomod_excludes.run_command")
+
+    result = apply_gomod_excludes_and_replaces(tmp_path)
+
+    assert result is True
+    commands = [c.args[0] for c in mock_run.call_args_list]
+    assert commands == [
+        "go mod edit -exclude sigs.k8s.io/structured-merge-diff/v7@v7.0.0",
+        "go mod download",
+    ]
+
+
+def test_apply_skips_structured_merge_diff_v7_exclude_when_present(tmp_path, mocker):
+    """Test that a go.mod already excluding structured-merge-diff/v7 makes no
+    changes — the standard exclude is not re-added."""
+    gomod = tmp_path / "go.mod"
+    gomod.write_text(
+        "module example.com/test\n\ngo 1.23\n\n"
+        "exclude sigs.k8s.io/structured-merge-diff/v7 v7.0.0\n"
+    )
+
+    mock_run = mocker.patch("updater.gomod_excludes.run_command")
+
+    result = apply_gomod_excludes_and_replaces(tmp_path)
+
+    assert result is False  # Already present, nothing to add or drop
+    assert mock_run.call_count == 0
 
 
 def test_apply_excludes_removes_obsolete_k8s_entries(tmp_path, mocker):
@@ -269,6 +310,10 @@ replace k8s.io/kube-openapi => k8s.io/kube-openapi v0.0.0-20250701173324-9bd5c66
     assert any("dropexclude" in c and "k8s.io/client-go" in c for c in calls)
     assert any("dropexclude" in c and "structured-merge-diff" in c for c in calls)
     assert any("dropreplace" in c and "kube-openapi" in c for c in calls)
+    # The v6 exclude is dropped while the v7 exclude is added in the same pass
+    assert any(
+        "go mod edit -exclude sigs.k8s.io/structured-merge-diff/v7@v7.0.0" in c for c in calls
+    )
 
 
 def test_apply_excludes_missing_gomod(tmp_path):
@@ -307,6 +352,7 @@ def test_apply_excludes_does_not_call_go_mod_download_when_no_changes(tmp_path, 
 go 1.23
 
 exclude cloud.google.com/go v0.26.0
+exclude sigs.k8s.io/structured-merge-diff/v7 v7.0.0
 
 replace (
     github.com/charmbracelet/x/cellbuf => github.com/charmbracelet/x/cellbuf v0.0.15
@@ -357,6 +403,7 @@ def test_tools_go_replaces_kept_when_tools_go_exists(tmp_path, mocker):
 go 1.23
 
 exclude cloud.google.com/go v0.26.0
+exclude sigs.k8s.io/structured-merge-diff/v7 v7.0.0
 
 replace (
     github.com/charmbracelet/x/cellbuf => github.com/charmbracelet/x/cellbuf v0.0.15
