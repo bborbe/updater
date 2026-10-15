@@ -125,6 +125,9 @@ def run_command(
             log_func(f"  stdout: {result.stdout}", to_console=True)
         if result.stderr:
             log_func(f"  stderr: {result.stderr}", to_console=True)
-        raise RuntimeError(f"Command failed: {cmd} (exit code {result.returncode})")
+        message = f"Command failed: {cmd} (exit code {result.returncode})"
+        if result.stderr and result.stderr.strip():
+            message = f"{message}\n{result.stderr.strip()}"
+        raise RuntimeError(message)
 
     return result

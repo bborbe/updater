@@ -1,9 +1,40 @@
 """Tests for go.mod excludes and replaces."""
 
+import pytest
+
 from updater.gomod_excludes import (
+    EXCLUDE_CONFLICT_PHRASES,
+    STRUCTURED_MERGE_DIFF_V7_EXCLUDE,
     apply_gomod_excludes_and_replaces,
+    drop_exclude,
+    is_exclude_conflict,
     read_gomod_excludes_and_replaces,
 )
+from updater.pipeline import GoDepUpdateStep, StepStatus
+
+# Verbatim conflict text Go prints from `go get <module>@latest` when the exclude
+# has removed a package the graph imports.
+GO_GET_CONFLICT_TEXT = (
+    "sigs.k8s.io/structured-merge-diff/v7/merge: cannot find module providing "
+    "package sigs.k8s.io/structured-merge-diff/v7/merge"
+)
+
+# Verbatim conflict text Go prints from the trailing `go mod tidy` for the same
+# root cause — a different phrasing of the same conflict.
+GO_MOD_TIDY_CONFLICT_TEXT = (
+    "sigs.k8s.io/structured-merge-diff/v7/merge: module "
+    "sigs.k8s.io/structured-merge-diff@latest found (v1.0.2), but does not "
+    "contain package sigs.k8s.io/structured-merge-diff/v7/merge"
+)
+
+
+def _write_gomod_with_v7_exclude(tmp_path):
+    """Write a go.mod carrying the structured-merge-diff v7 exclude."""
+    gomod = tmp_path / "go.mod"
+    gomod.write_text(
+        "module example.com/test\n\ngo 1.23\n\n"
+        "exclude sigs.k8s.io/structured-merge-diff/v7 v7.0.0\n"
+    )
 
 
 def test_read_empty_gomod(tmp_path):
@@ -450,3 +481,101 @@ replace (
     assert any("dropreplace" in c and "go-header" in c for c in calls)
     assert any("dropreplace" in c and "go-diskfs" in c for c in calls)
     assert any("dropreplace" in c and "ginkgolinter" in c for c in calls)
+
+
+# ---------------------------------------------------------------------------
+# is_exclude_conflict
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("phrase", EXCLUDE_CONFLICT_PHRASES)
+def test_is_exclude_conflict_true_for_each_phrase(phrase):
+    """Every phrase in EXCLUDE_CONFLICT_PHRASES is a conflict when v7 is named."""
+    error_text = f"sigs.k8s.io/structured-merge-diff/v7/merge: {phrase}"
+
+    assert is_exclude_conflict(error_text) is True
+
+
+def test_is_exclude_conflict_false_when_v7_named_without_phrase():
+    """Naming v7 alone is not enough — a conflict phrase must also be present."""
+    error_text = "sigs.k8s.io/structured-merge-diff/v7/merge: some unrelated failure"
+
+    assert is_exclude_conflict(error_text) is False
+
+
+def test_is_exclude_conflict_false_when_phrase_without_v7():
+    """A conflict phrase about another module is not this conflict."""
+    error_text = "example.com/other: cannot find module providing package example.com/other"
+
+    assert is_exclude_conflict(error_text) is False
+
+
+def test_is_exclude_conflict_false_when_neither():
+    """Neither v7 nor a conflict phrase — not this conflict."""
+    assert is_exclude_conflict("command failed for unrelated reasons") is False
+
+
+# ---------------------------------------------------------------------------
+# drop_exclude
+# ---------------------------------------------------------------------------
+
+
+def test_drop_exclude_present(tmp_path, mocker):
+    """Dropping a present exclude runs go mod edit -dropexclude then go mod download."""
+    _write_gomod_with_v7_exclude(tmp_path)
+
+    mock_run = mocker.patch("updater.gomod_excludes.run_command")
+
+    assert drop_exclude(tmp_path, STRUCTURED_MERGE_DIFF_V7_EXCLUDE) is True
+
+    calls = [c.args[0] for c in mock_run.call_args_list]
+    assert calls[0] == ("go mod edit -dropexclude sigs.k8s.io/structured-merge-diff/v7@v7.0.0")
+    assert calls[1] == "go mod download"
+
+
+def test_drop_exclude_absent(tmp_path, mocker):
+    """An absent exclude returns False and runs no go mod edit."""
+    gomod = tmp_path / "go.mod"
+    gomod.write_text("module example.com/test\n\ngo 1.23\n")
+
+    mock_run = mocker.patch("updater.gomod_excludes.run_command")
+
+    assert drop_exclude(tmp_path, STRUCTURED_MERGE_DIFF_V7_EXCLUDE) is False
+    assert mock_run.call_count == 0
+
+
+# ---------------------------------------------------------------------------
+# GoDepUpdateStep — v7 exclude back-off regression
+# ---------------------------------------------------------------------------
+
+
+async def test_go_dep_update_step_backs_off_v7_exclude_on_go_get_conflict(tmp_path, mocker):
+    """A go-get-phrased exclude conflict drops the exclude and retries once."""
+    _write_gomod_with_v7_exclude(tmp_path)
+
+    mock_update = mocker.patch("updater.pipeline.update_go_dependencies")
+    mock_update.side_effect = [RuntimeError(GO_GET_CONFLICT_TEXT), False]
+    mock_run = mocker.patch("updater.gomod_excludes.run_command")
+
+    result = await GoDepUpdateStep().run(tmp_path, {})
+
+    calls = [c.args[0] for c in mock_run.call_args_list]
+    assert "go mod edit -dropexclude sigs.k8s.io/structured-merge-diff/v7@v7.0.0" in calls
+    assert mock_update.call_count == 2
+    assert result.status == StepStatus.SUCCESS
+
+
+async def test_go_dep_update_step_backs_off_v7_exclude_on_tidy_conflict(tmp_path, mocker):
+    """A tidy-phrased exclude conflict drops the exclude and retries once."""
+    _write_gomod_with_v7_exclude(tmp_path)
+
+    mock_update = mocker.patch("updater.pipeline.update_go_dependencies")
+    mock_update.side_effect = [RuntimeError(GO_MOD_TIDY_CONFLICT_TEXT), False]
+    mock_run = mocker.patch("updater.gomod_excludes.run_command")
+
+    result = await GoDepUpdateStep().run(tmp_path, {})
+
+    calls = [c.args[0] for c in mock_run.call_args_list]
+    assert "go mod edit -dropexclude sigs.k8s.io/structured-merge-diff/v7@v7.0.0" in calls
+    assert mock_update.call_count == 2
+    assert result.status == StepStatus.SUCCESS

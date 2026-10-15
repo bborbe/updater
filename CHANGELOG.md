@@ -2,6 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
+## Unreleased
+
+- fix: back off the structured-merge-diff v7 exclude when a module's graph imports v7, so a sweep no longer aborts on it
+
 ## v0.26.3
 
 - fix: exclude sigs.k8s.io/structured-merge-diff/v7 v7.0.0 in every go.mod so sweeps keep k8s.io v0.37 repos building

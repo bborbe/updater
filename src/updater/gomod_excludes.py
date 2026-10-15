@@ -28,9 +28,46 @@ from .log_manager import log_message, run_command
 # Removal trigger: when `k8s.io/apimachinery` v0.38.0 is released stable, delete this
 # entry and add "sigs.k8s.io/structured-merge-diff/v7@" to OBSOLETE_EXCLUDES_PREFIXES
 # so the updater strips it from projects again.
-STANDARD_EXCLUDES: list[str] = [
-    "sigs.k8s.io/structured-merge-diff/v7@v7.0.0",
-]
+# This exclude is only correct while the module still sits on the pre-1.38 k8s line.
+# Once a module's graph imports structured-merge-diff/v7 itself, the exclude makes the
+# module unresolvable, so the updater backs it out for that module for that run — see
+# drop_exclude / is_exclude_conflict. The constant is retired by the removal trigger
+# documented on STANDARD_EXCLUDES.
+STRUCTURED_MERGE_DIFF_V7_EXCLUDE: str = "sigs.k8s.io/structured-merge-diff/v7@v7.0.0"
+
+STANDARD_EXCLUDES: list[str] = [STRUCTURED_MERGE_DIFF_V7_EXCLUDE]
+
+# Phrasings Go prints when an `exclude` has removed a module that a dependency still
+# imports. `go get <module>@latest` says "cannot find module providing package" while
+# the trailing `go mod tidy` says "does not contain package" — the same root cause,
+# different text, so both are required. "excluded by go.mod" is included defensively as
+# a plausible third wording; it has NOT been observed in this repo's captured evidence.
+# The list errs toward inclusion on purpose: the back-off is gated by drop_exclude (which
+# returns True only when that exact exclude is present), it is per run and non-persistent,
+# and the module's own `make precommit` still gates the result — so an over-broad phrase
+# costs at worst one extra update pass, while a missed phrase is the exact defect this
+# back-off exists to fix.
+EXCLUDE_CONFLICT_PHRASES: tuple[str, ...] = (
+    "cannot find module providing package",
+    "does not contain package",
+    "excluded by go.mod",
+)
+
+
+def is_exclude_conflict(error_text: str) -> bool:
+    """Check whether an error is the structured-merge-diff v7 exclude conflict.
+
+    Args:
+        error_text: The error message to classify
+
+    Returns:
+        True iff error_text names sigs.k8s.io/structured-merge-diff/v7 AND contains
+        any phrase in EXCLUDE_CONFLICT_PHRASES
+    """
+    if "sigs.k8s.io/structured-merge-diff/v7" not in error_text:
+        return False
+    return any(phrase in error_text for phrase in EXCLUDE_CONFLICT_PHRASES)
+
 
 # Standard replacements
 # Format: (old_module, "new_module version")
@@ -272,3 +309,35 @@ def apply_gomod_excludes_and_replaces(
         run_command("go mod download", cwd=module_path, quiet=True, log_func=log_func)
 
     return changes_made
+
+
+def drop_exclude(
+    module_path: Path, exclude: str, log_func: Callable[..., None] = log_message
+) -> bool:
+    """Remove a single exclude from a module's go.mod, if present.
+
+    Used to back out the fleet-wide structured-merge-diff v7 exclude for a module
+    whose graph genuinely imports v7.
+
+    Args:
+        module_path: Path to module
+        exclude: The exclude to drop, as "module@version"
+        log_func: Logging function
+
+    Returns:
+        True if the exclude was present and dropped, False if it was absent
+    """
+    existing_excludes, _ = read_gomod_excludes_and_replaces(module_path)
+    if exclude not in existing_excludes:
+        log_func(f"  → Exclude not present, nothing to drop: {exclude}", to_console=True)
+        return False
+
+    log_func(f"  → Dropping exclude: {exclude}", to_console=True)
+    run_command(
+        f"go mod edit -dropexclude {exclude}",
+        cwd=module_path,
+        quiet=True,
+        log_func=log_func,
+    )
+    run_command("go mod download", cwd=module_path, quiet=True, log_func=log_func)
+    return True
