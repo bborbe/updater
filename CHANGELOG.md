@@ -2,6 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
+## Unreleased
+
+- fix: exclude sigs.k8s.io/structured-merge-diff/v7 v7.0.0 in every go.mod so sweeps keep k8s.io v0.37 repos building
+
 ## v0.26.2
 
 - fix: repoint the `tests/test_version_updater.py` registry fixture at the live registry — `docker.quant.benjamin-borbe.de:443` is decommissioned (404), so the fixture now reads `docker.prod.nuke.benjamin-borbe.de:443`.

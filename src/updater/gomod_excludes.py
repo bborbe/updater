@@ -7,8 +7,8 @@ from .log_manager import log_message, run_command
 
 # Standard exclusions for problematic versions
 # NOTE: Excludes and replaces break `go install <module>@latest` — Go rejects a
-# main-module go.mod containing those directives. Keep this list empty unless
-# absolutely necessary.
+# main-module go.mod containing those directives. Keep this list to entries that
+# carry a documented reason and a removal trigger — never add one speculatively.
 # Use OBSOLETE_EXCLUDES_PREFIXES to actively remove old excludes from projects.
 #
 # The former cloud.google.com/go@v0.26.0 entry was removed: it was applied to
@@ -17,7 +17,20 @@ from .log_manager import log_message, run_command
 # `golang.org/x/oauth2/google` and no longer triggers in modern dependency graphs
 # (where cloud.google.com/go resolves far above v0.26.0). Repos that still need
 # the exclude surface a loud `go mod tidy` error and can be handled case-by-case.
-STANDARD_EXCLUDES: list[str] = []
+#
+# sigs.k8s.io/structured-merge-diff/v7@v7.0.0 — reason: kube-openapi tip requires
+# structured-merge-diff/v7, which only the unreleased Kubernetes 1.38 line supports.
+# A sweep that picks up kube-openapi tip alongside k8s.io v0.37.x libraries fails to
+# build `k8s.io/apimachinery/pkg/util/managedfields`. Excluding v7 forces `go mod tidy`
+# back to the kube-openapi revision pinned by k8s.io v0.37.x, which uses v6.
+# Trade-off: like every exclude, this breaks `go install <module>@latest` for repos
+# carrying it — accepted by the operator on 2026-10-15.
+# Removal trigger: when `k8s.io/apimachinery` v0.38.0 is released stable, delete this
+# entry and add "sigs.k8s.io/structured-merge-diff/v7@" to OBSOLETE_EXCLUDES_PREFIXES
+# so the updater strips it from projects again.
+STANDARD_EXCLUDES: list[str] = [
+    "sigs.k8s.io/structured-merge-diff/v7@v7.0.0",
+]
 
 # Standard replacements
 # Format: (old_module, "new_module version")
