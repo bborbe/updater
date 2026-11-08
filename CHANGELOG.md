@@ -5,6 +5,7 @@ All notable changes to this project will be documented in this file.
 ## Unreleased
 
 - chore: restate the do-not-merge contract in the gate workflow
+- chore: pin CI to Python 3.14 so `librt` resolves from a wheel instead of compiling from source
 
 ## v0.26.4
 
