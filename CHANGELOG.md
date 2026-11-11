@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## Unreleased
+## v0.26.6
 
 - fix: never leave a direct Go module on a pre-release version — resolve each direct module to its highest stable release and log the skip
 
