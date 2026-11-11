@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## Unreleased
+## v0.26.7
 
 - fix: drop the indirect pins a pre-release dragged in, so a corrected module builds again
 
