@@ -7,7 +7,12 @@ import pytest
 from updater import config
 from updater.go_updater import (
     _has_makefile_target,
+    _highest_stable,
+    _is_prerelease,
+    _is_pseudo_version,
     _parse_osv_go_packages,
+    _version_parts,
+    downgrade_prerelease_requirements,
     fix_osv_vulnerabilities,
     run_precommit,
     update_go_dependencies,
@@ -43,8 +48,10 @@ class TestUpdateGoDependencies:
             result = update_go_dependencies(mock_module_path)
 
         assert result is False
-        # Should call go list to check for updates
-        mock_run.assert_called_once()
+        # First call lists modules, second call is the pre-release audit
+        assert mock_run.call_count == 2
+        assert "go list -mod=mod -m -u -f" in mock_run.call_args_list[0].args[0]
+        assert "go list -mod=mod -m -f" in mock_run.call_args_list[1].args[0]
 
     def test_single_update_available(self, mock_module_path, reset_config):
         """Test updating a single dependency."""
@@ -56,19 +63,21 @@ class TestUpdateGoDependencies:
             # Second call: check specific module
             # Third call: go get
             # Fourth call: check for more updates (none)
-            # Fifth call: go mod tidy
+            # Fifth call: pre-release audit
+            # Sixth call: go mod tidy
             mock_run.side_effect = [
                 Mock(returncode=0, stdout=mock_stdout_check, stderr=""),  # list outdated
                 Mock(returncode=0, stdout=mock_stdout_detail, stderr=""),  # check module
                 Mock(returncode=0, stdout="", stderr=""),  # go get
                 Mock(returncode=0, stdout="", stderr=""),  # check again (no more updates)
+                Mock(returncode=0, stdout="", stderr=""),  # pre-release audit
                 Mock(returncode=0, stdout="", stderr=""),  # go mod tidy
             ]
 
             result = update_go_dependencies(mock_module_path)
 
         assert result is True
-        assert mock_run.call_count == 5
+        assert mock_run.call_count == 6
 
     def test_multiple_updates_single_iteration(self, mock_module_path, reset_config):
         """Test updating multiple dependencies in single iteration."""
@@ -87,12 +96,14 @@ class TestUpdateGoDependencies:
                 # Iteration 2: check again (no more updates)
                 Mock(returncode=0, stdout="", stderr=""),
                 # Cleanup
+                Mock(returncode=0, stdout="", stderr=""),  # pre-release audit
                 Mock(returncode=0, stdout="", stderr=""),  # go mod tidy
             ]
 
             result = update_go_dependencies(mock_module_path)
 
         assert result is True
+        assert mock_run.call_count == 8
 
     def test_iterative_updates(self, mock_module_path, reset_config):
         """Test multiple iterations when updates reveal more updates."""
@@ -109,12 +120,14 @@ class TestUpdateGoDependencies:
                 # Iteration 3: no more updates
                 Mock(returncode=0, stdout="", stderr=""),
                 # Cleanup
+                Mock(returncode=0, stdout="", stderr=""),  # pre-release audit
                 Mock(returncode=0, stdout="", stderr=""),  # go mod tidy
             ]
 
             result = update_go_dependencies(mock_module_path)
 
         assert result is True
+        assert mock_run.call_count == 9
 
     def test_max_iterations_reached(self, mock_module_path, reset_config):
         """Test that max iterations limit is respected."""
@@ -132,6 +145,7 @@ class TestUpdateGoDependencies:
                 Mock(returncode=0, stdout="github.com/baz/qux v2.0.0 [v2.1.0]", stderr=""),
                 Mock(returncode=0, stdout="", stderr=""),  # go get
                 # Cleanup
+                Mock(returncode=0, stdout="", stderr=""),  # pre-release audit
                 Mock(returncode=0, stdout="", stderr=""),  # go mod tidy
             ]
 
@@ -139,7 +153,7 @@ class TestUpdateGoDependencies:
 
         assert result is True
         # Should stop after max iterations, then run cleanup
-        assert mock_run.call_count == 7
+        assert mock_run.call_count == 8
 
     def test_module_with_no_update_available(self, mock_module_path, reset_config):
         """Test skipping module when no update is actually available."""
@@ -151,6 +165,8 @@ class TestUpdateGoDependencies:
                 Mock(returncode=0, stdout=mock_stdout_check, stderr=""),
                 # But detailed check shows no update (no brackets)
                 Mock(returncode=0, stdout="github.com/foo/bar v1.0.0", stderr=""),
+                # Pre-release audit (nothing to correct)
+                Mock(returncode=0, stdout="", stderr=""),
                 # Check again (no more) - this call doesn't happen because no updates were made
             ]
 
@@ -158,7 +174,7 @@ class TestUpdateGoDependencies:
 
         # No updates were made, so returns False and no cleanup commands
         assert result is False
-        assert mock_run.call_count == 2  # Only the first two calls
+        assert mock_run.call_count == 3  # list, module check, pre-release audit
 
     def test_verbose_mode_logging(self, mock_module_path, reset_config):
         """Test verbose mode produces console output."""
@@ -170,7 +186,7 @@ class TestUpdateGoDependencies:
             update_go_dependencies(mock_module_path)
 
         # Just verify it doesn't crash - actual logging checked by integration tests
-        assert mock_run.call_count == 1
+        assert mock_run.call_count == 2  # list plus pre-release audit
 
     def test_go_mod_tidy_called(self, mock_module_path, reset_config):
         """Test that go mod tidy is called after updates."""
@@ -180,12 +196,14 @@ class TestUpdateGoDependencies:
                 Mock(returncode=0, stdout="github.com/foo/bar v1.0.0 [v1.1.0]", stderr=""),
                 Mock(returncode=0, stdout="", stderr=""),  # go get
                 Mock(returncode=0, stdout="", stderr=""),  # check again
+                Mock(returncode=0, stdout="", stderr=""),  # pre-release audit
                 Mock(returncode=0, stdout="", stderr=""),  # go mod tidy
             ]
 
             result = update_go_dependencies(mock_module_path)
 
         assert result is True
+        assert mock_run.call_count == 6
 
         # Verify tidy was called
         calls = [str(call) for call in mock_run.call_args_list]
@@ -423,3 +441,165 @@ class TestFixOsvVulnerabilities:
             result = fix_osv_vulnerabilities(tmp_path)
 
         assert result is False
+
+
+class TestPrereleaseHelpers:
+    """Tests for pre-release detection, stable selection, and the correction path."""
+
+    @pytest.mark.parametrize(
+        ("version", "expected"),
+        [
+            ("v0.38.0-beta.0", True),
+            ("v1.0.0-rc.1", True),
+            ("v2.0.0-alpha", True),
+            ("v0.0.0-20260101120000-abcdef123456", True),
+            ("v0.37.2", False),
+            ("v1.14.33", False),
+            ("v1.2.3+build.7", False),
+            ("1.2.3", False),
+        ],
+    )
+    def test_is_prerelease(self, version, expected):
+        """A hyphen in the version core marks a pre-release."""
+        assert _is_prerelease(version) is expected
+
+    @pytest.mark.parametrize(
+        ("version", "expected"),
+        [
+            ("v0.0.0-20260101120000-abcdef123456", True),
+            ("v1.2.3-0.20260101120000-abcdef123456", True),
+            ("v1.2.3-pre.0.20260101120000-abcdef123456", True),
+            ("v0.38.0-beta.0", False),
+            ("v0.37.2", False),
+        ],
+    )
+    def test_is_pseudo_version(self, version, expected):
+        """Only a 14-digit timestamp plus 12 hex characters marks a commit pseudo-version."""
+        assert _is_pseudo_version(version) is expected
+
+    @pytest.mark.parametrize(
+        ("version", "expected"),
+        [
+            ("v0.38.0-beta.0", (0, 38, 0)),
+            ("v1.2.3+build.7", (1, 2, 3)),
+            ("v0.37.2", (0, 37, 2)),
+            ("not-a-version", None),
+        ],
+    )
+    def test_version_parts(self, version, expected):
+        """The numeric triple parses even when a pre-release suffix is present."""
+        assert _version_parts(version) == expected
+
+    @pytest.mark.parametrize(
+        ("versions", "major", "expected"),
+        [
+            (["v0.9.0", "v0.10.0", "v0.10.2"], None, "v0.10.2"),
+            (["v0.37.1", "v0.37.2", "v0.38.0-beta.0"], None, "v0.37.2"),
+            (["v1.0.0", "v1.1.0", "v1.2.0"], None, "v1.2.0"),
+            (["v1.0.0-rc.1", "v1.0.0-beta.2"], None, None),
+            ([], None, None),
+            (["k8s.io/api", "v0.37.1", "not-a-version", "v0.37.2"], None, "v0.37.2"),
+            (["v0.9.0", "v1.0.0"], 0, "v0.9.0"),
+        ],
+    )
+    def test_highest_stable(self, versions, major, expected):
+        """A pre-release never wins, ordering is numeric, and the major filter holds."""
+        assert _highest_stable(versions, major=major) == expected
+
+    def test_downgrade_corrects_prerelease_to_highest_stable(self, mock_module_path, reset_config):
+        """The measured lib/k8s defect: a pre-release requirement is moved to the highest stable."""
+        with patch("updater.go_updater.run_command") as mock_run:
+            mock_run.side_effect = [
+                Mock(
+                    returncode=0,
+                    stdout="k8s.io/api@v0.38.0-beta.0\n\nbborbe/k8s@v1.14.33\n\n",
+                    stderr="",
+                ),
+                Mock(
+                    returncode=0,
+                    stdout="k8s.io/api v0.37.0 v0.37.1 v0.37.2 v0.38.0-alpha.0 v0.38.0-beta.0",
+                    stderr="",
+                ),
+                Mock(returncode=0, stdout="", stderr=""),
+            ]
+            corrected = downgrade_prerelease_requirements(mock_module_path)
+        commands = [call.args[0] for call in mock_run.call_args_list]
+        get_commands = [command for command in commands if command.startswith("go get")]
+        assert corrected is True
+        assert "go get k8s.io/api@v0.37.2" in get_commands
+        assert not any("v0.38.0-beta.0" in command for command in get_commands)
+        assert not any("bborbe/k8s" in command for command in commands)
+
+    def test_pseudo_version_left_alone(self, mock_module_path, reset_config):
+        """A commit pseudo-version is a deliberate pin and is never moved."""
+        with patch("updater.go_updater.run_command") as mock_run:
+            mock_run.side_effect = [
+                Mock(
+                    returncode=0,
+                    stdout="k8s.io/utils@v0.0.0-20260101120000-abcdef123456\n",
+                    stderr="",
+                ),
+            ]
+            corrected = downgrade_prerelease_requirements(mock_module_path)
+        commands = [call.args[0] for call in mock_run.call_args_list]
+        assert corrected is False
+        assert not any(command.startswith("go get") for command in commands)
+
+    def test_no_stable_of_current_major_leaves_prerelease(self, mock_module_path, reset_config):
+        """When no stable release of the current major exists, the module is left alone."""
+        with patch("updater.go_updater.run_command") as mock_run:
+            mock_run.side_effect = [
+                Mock(returncode=0, stdout="example.com/lib@v1.0.0-rc.1\n", stderr=""),
+                Mock(returncode=0, stdout="example.com/lib v0.9.0 v0.10.0", stderr=""),
+            ]
+            corrected = downgrade_prerelease_requirements(mock_module_path)
+        commands = [call.args[0] for call in mock_run.call_args_list]
+        assert corrected is False
+        assert not any(command.startswith("go get") for command in commands)
+
+    def test_update_go_dependencies_corrects_prerelease_without_upgrade(
+        self, mock_module_path, reset_config
+    ):
+        """A sweep with no upgrade available still corrects a pre-release requirement."""
+        with patch("updater.go_updater.run_command") as mock_run:
+            mock_run.side_effect = [
+                Mock(returncode=0, stdout="", stderr=""),  # list outdated: none
+                Mock(returncode=0, stdout="k8s.io/api@v0.38.0-beta.0\n", stderr=""),  # audit
+                Mock(
+                    returncode=0,
+                    stdout="k8s.io/api v0.37.1 v0.37.2 v0.38.0-beta.0",
+                    stderr="",
+                ),  # versions
+                Mock(returncode=0, stdout="", stderr=""),  # go get
+                Mock(returncode=0, stdout="", stderr=""),  # go mod tidy
+            ]
+            result = update_go_dependencies(mock_module_path)
+        commands = [call.args[0] for call in mock_run.call_args_list]
+        assert result is True
+        assert "go get k8s.io/api@v0.37.2" in commands
+        assert "go mod tidy" in commands
+
+    def test_upgrade_guard_skips_prerelease_candidate(self, mock_module_path, reset_config):
+        """A pre-release reported as the available upgrade is never applied."""
+        with patch("updater.go_updater.run_command") as mock_run:
+            mock_run.side_effect = [
+                Mock(returncode=0, stdout="k8s.io/api", stderr=""),  # list outdated
+                Mock(
+                    returncode=0, stdout="k8s.io/api v0.37.2 [v0.38.0-beta.0]", stderr=""
+                ),  # check
+                Mock(
+                    returncode=0,
+                    stdout="k8s.io/api v0.37.0 v0.37.1 v0.37.2 v0.38.0-alpha.0 v0.38.0-beta.0",
+                    stderr="",
+                ),  # versions
+                Mock(returncode=0, stdout="", stderr=""),  # go get stable
+                Mock(returncode=0, stdout="", stderr=""),  # list again: none
+                Mock(returncode=0, stdout="", stderr=""),  # audit
+                Mock(returncode=0, stdout="", stderr=""),  # go mod tidy
+            ]
+            result = update_go_dependencies(mock_module_path)
+        commands = [call.args[0] for call in mock_run.call_args_list]
+        assert result is True
+        assert "go get k8s.io/api@v0.37.2" in commands
+        assert not any("@latest" in command for command in commands)
+        assert not any("v0.38.0-beta.0" in command for command in commands)
