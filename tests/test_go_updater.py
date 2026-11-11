@@ -571,6 +571,7 @@ class TestPrereleaseHelpers:
                     stderr="",
                 ),  # versions
                 Mock(returncode=0, stdout="", stderr=""),  # go get
+                Mock(returncode=0, stdout="", stderr=""),  # clean_indirect_deps: list indirect
                 Mock(returncode=0, stdout="", stderr=""),  # go mod tidy
             ]
             result = update_go_dependencies(mock_module_path)
@@ -603,3 +604,42 @@ class TestPrereleaseHelpers:
         assert "go get k8s.io/api@v0.37.2" in commands
         assert not any("@latest" in command for command in commands)
         assert not any("v0.38.0-beta.0" in command for command in commands)
+
+    def test_correction_cleans_indirect_pins(self, mock_module_path, reset_config):
+        """A correction drops the indirect pins the pre-release dragged in."""
+        with (
+            patch("updater.go_updater.clean_indirect_deps") as mock_clean,
+            patch("updater.go_updater.run_command") as mock_run,
+        ):
+            mock_run.side_effect = [
+                Mock(returncode=0, stdout="", stderr=""),  # list outdated: none
+                Mock(returncode=0, stdout="example.com/lib@v1.0.0-rc.1\n", stderr=""),  # audit
+                Mock(returncode=0, stdout="example.com/lib v1.0.0", stderr=""),  # versions
+                Mock(returncode=0, stdout="", stderr=""),  # go get stable
+                Mock(returncode=0, stdout="", stderr=""),  # go mod tidy
+            ]
+            result = update_go_dependencies(mock_module_path)
+        commands = [call.args[0] for call in mock_run.call_args_list]
+        assert result is True
+        assert "go get example.com/lib@v1.0.0" in commands
+        mock_clean.assert_called_once()
+
+    def test_no_correction_skips_indirect_cleanup(self, mock_module_path, reset_config):
+        """An upgrade with nothing to correct leaves the indirect graph alone."""
+        with (
+            patch("updater.go_updater.clean_indirect_deps") as mock_clean,
+            patch("updater.go_updater.run_command") as mock_run,
+        ):
+            mock_run.side_effect = [
+                Mock(returncode=0, stdout="example.com/lib", stderr=""),  # list outdated
+                Mock(returncode=0, stdout="example.com/lib v1.0.0 [v1.1.0]", stderr=""),  # check
+                Mock(returncode=0, stdout="", stderr=""),  # go get stable
+                Mock(returncode=0, stdout="", stderr=""),  # list again: none
+                Mock(returncode=0, stdout="example.com/lib@v1.1.0\n", stderr=""),  # audit
+                Mock(returncode=0, stdout="", stderr=""),  # go mod tidy
+            ]
+            result = update_go_dependencies(mock_module_path)
+        commands = [call.args[0] for call in mock_run.call_args_list]
+        assert result is True
+        assert "go get example.com/lib@v1.1.0" in commands
+        mock_clean.assert_not_called()

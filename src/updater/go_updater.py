@@ -237,6 +237,12 @@ def update_go_dependencies(module_path: Path, log_func: Callable[..., None] = lo
             break
 
     corrected = downgrade_prerelease_requirements(module_path, log_func=log_func)
+    if corrected:
+        log_func(
+            "  → Dropping indirect pins left behind by the pre-release correction",
+            to_console=True,
+        )
+        clean_indirect_deps(module_path, log_func=log_func)
     any_updates_made = any_updates_made or corrected
 
     if not any_updates_made:
